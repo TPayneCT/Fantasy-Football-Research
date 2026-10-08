@@ -5,6 +5,8 @@ window.PA_DATA = {
   seasons: {season: [[week, defense, position, points, [[name, team, pts, player_id], ...]], ...]},
   upcoming: {season, week (next to play), weeks: {week: [[away, home, date], ...]}} or null,
   roster: {team_name, players: [{id, name, pos, team, starter}]} or null,
+  league: {id, name, members: [[username, team_name], ...]},
+  players: {player_id: [name, pos, team]} for every fantasy-relevant NFL player,
 }
 """
 import json
@@ -62,6 +64,25 @@ def roster(config):
     return {"team_name": (me.get("metadata") or {}).get("team_name") or me["display_name"], "players": players}
 
 
+def league_info(config):
+    lg = sleeper.league(config["league_id"])
+    members = sorted(([u["display_name"], (u.get("metadata") or {}).get("team_name") or ""]
+                      for u in sleeper.league_users(config["league_id"])), key=lambda m: m[0].lower())
+    return {"id": config["league_id"], "name": lg["name"], "members": members}
+
+
+def player_index():
+    """Slim player list so the page can show any roster it loads from Sleeper."""
+    out = {}
+    for pid, p in sleeper.players().items():
+        pos = p.get("position")
+        if pos not in POSITIONS or (pos != "DEF" and not p.get("team")):
+            continue
+        name = f"{pid} D/ST" if pos == "DEF" else (p.get("full_name") or f"{p.get('first_name', '')} {p.get('last_name', '')}".strip())
+        out[pid] = [name, pos, p.get("team") or pid]
+    return out
+
+
 def main():
     config = json.loads((ROOT / "config.json").read_text())
     state = sleeper.nfl_state()
@@ -70,6 +91,8 @@ def main():
         "seasons": seasons(),
         "upcoming": upcoming(state),
         "roster": roster(config),
+        "league": league_info(config),
+        "players": player_index(),
     }
     out = ROOT / "dashboard" / "data.js"
     # Keep the old timestamp when nothing else changed, so a quiet day makes no commit.

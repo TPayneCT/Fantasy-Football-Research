@@ -67,6 +67,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, td.cell:focus-v
 .pl .rate b { display: block; font-family: var(--font-display); font-size: 22px; line-height: 1; }
 .pl .rate small { color: var(--muted); font-size: 12px; }
 .pl.tap { cursor: pointer; }
+.go { font: inherit; font-weight: 700; color: var(--surface); background: var(--accent); border: 0; border-radius: 6px; padding: 6px 14px; min-height: 36px; cursor: pointer; }
+#who-status { flex-basis: 100%; }
+#who-status:empty { display: none; }
 .group-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin-top: 6px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; color: var(--muted); }
 .ramp { display: inline-flex; align-items: center; gap: 6px; }
@@ -187,6 +190,13 @@ footer { color: var(--muted); font-size: 12px; }
   </div>
 
   <div id="view-team" class="view" hidden>
+    <form class="controls" id="who-form" aria-label="Choose a Sleeper team">
+      <label class="field"><span>Sleeper username</span><input type="search" id="who" list="members" autocomplete="off" placeholder="Pick or type a username"></label>
+      <datalist id="members"></datalist>
+      <label class="field" id="league-field" hidden><span>League</span><select id="league"></select></label>
+      <button type="submit" class="go">Load team</button>
+      <p class="hint" id="who-status" aria-live="polite"></p>
+    </form>
     <section class="team" id="team"></section>
   </div>
 
@@ -235,6 +245,7 @@ footer { color: var(--muted); font-size: 12px; }
   }
   const DATA = window.PA_DATA;
   const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
   const fmt = n => (Math.round(n * 10) / 10).toFixed(1);
   const signed = n => (n >= 0 ? "+" : "−") + fmt(Math.abs(n));
   const diffCls = n => n >= 0.05 ? "up" : n <= -0.05 ? "down" : "";
@@ -252,7 +263,10 @@ footer { color: var(--muted); font-size: 12px; }
     view: ["board", "week", "team"].includes(saved.view) ? saved.view : "board",
     adj: saved.adj === true,
     mweek: DATA.upcoming ? DATA.upcoming.week : null,
-    msort: "team", mdir: 1
+    msort: "team", mdir: 1,
+    roster: DATA.roster ? { ...DATA.roster, league_id: DATA.league.id, league_name: DATA.league.name } : null,
+    who: saved.who || ""
+  
   };
 
   function weeksOf(season) {
@@ -514,27 +528,28 @@ footer { color: var(--muted); font-size: 12px; }
   }
 
   function renderTeam() {
-    const el = $("team"), r = DATA.roster, m = matchupModel();
-    if (!r) { el.innerHTML = `<p class="hint">Roster not found. Check sleeper_username in config.json.</p>`; return; }
+    const el = $("team"), r = state.roster, m = matchupModel();
+    if (!r) { el.innerHTML = `<p class="hint">Pick a username above to load a team.</p>`; return; }
     const row = pl => {
       const o = m && m.opp[pl.team];
       const own = m && m.player[pl.id];
       const ownTxt = own ? `${fmt(own.total / own.games)} pts/game` : "No games yet";
       if (!o) {
         return `<div class="pl ${pl.starter ? "" : "bench"}"><span class="pos">${pl.pos}</span>
-          <span class="who"><b>${pl.name}</b><small>${pl.team || "FA"} · ${ownTxt}</small></span>
+          <span class="who"><b>${esc(pl.name)}</b><small>${pl.team || "FA"} · ${ownTxt}</small></span>
           <span class="rate"><span class="pill mid">${pl.team ? "Bye" : "No game"}</span></span></div>`;
       }
       const c = m.byTeam[o.team].pos[pl.pos], diff = c.value - m.leagueAvg[pl.pos];
       const [cls, label] = tier(c.rank, m.n);
       return `<div class="pl tap ${pl.starter ? "" : "bench"}" tabindex="0" role="button" data-team="${o.team}" data-pos="${pl.pos}">
         <span class="pos">${pl.pos}</span>
-        <span class="who"><b>${pl.name}</b><small>${pl.team} ${o.at} ${o.team} · ${ownTxt}</small></span>
+        <span class="who"><b>${esc(pl.name)}</b><small>${pl.team} ${o.at} ${o.team} · ${ownTxt}</small></span>
         <span class="rate"><span class="pill ${cls}">${label}</span>
           <b class="d ${diffCls(diff)}">${signed(diff)}</b><small>${o.team} allows ${fmt(c.value)} · #${c.rank}</small></span></div>`;
     };
     const starters = r.players.filter(p => p.starter), bench = r.players.filter(p => !p.starter);
-    el.innerHTML = `<div><div class="eyebrow">Week ${m ? m.week : "—"} matchups</div><h2>${r.team_name}</h2></div>
+    el.innerHTML = `<div><div class="eyebrow">Week ${m ? m.week : "—"} matchups${r.league_name ? " · " + esc(r.league_name) : ""}</div><h2>${esc(r.team_name)}</h2></div>
+      ${r.league_id && r.league_id !== DATA.league.id ? `<p class="hint">Ratings use ${esc(DATA.league.name)} scoring, not this league's.</p>` : ""}
       ${m ? `<p class="hint">Big number = points the opponent allows to that position above or below the league average, per game (${rangeText(m)}). Tap a player to see that defense's games.</p>` : ""}
       <div class="group-label">Starters</div>${starters.map(row).join("")}
       <div class="group-label">Bench</div>${bench.map(row).join("")}`;
@@ -552,7 +567,7 @@ footer { color: var(--muted); font-size: 12px; }
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
     if (state.view === "week") renderWeek();
     if (state.view === "team") renderTeam();
-    store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir, view: state.view, adj: state.adj });
+    store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir, view: state.view, adj: state.adj, who: state.who });
   }
 
   function openDetail(team, pos) {
@@ -620,6 +635,53 @@ footer { color: var(--muted); font-size: 12px; }
   $("board").addEventListener("keydown", e => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("td.cell")) { e.preventDefault(); e.target.click(); }
   });
+
+  // Live roster lookup straight from Sleeper's public API (works on the Pages site; the Claude
+  // preview blocks outside requests, so it keeps the roster built into data.js).
+  const SLEEPER = "https://api.sleeper.app/v1";
+  const getJSON = async path => { const r = await fetch(SLEEPER + path); if (!r.ok) throw new Error(r.status); return r.json(); };
+  const status = msg => { $("who-status").textContent = msg; };
+  const leagueSeason = () => DATA.upcoming ? DATA.upcoming.season : seasons[0];
+  const nameFromStats = id => { for (const s of seasons) for (const r of DATA.seasons[s]) for (const p of r[4]) if (p[3] === id) return [p[0], r[2], p[1]]; return null; };
+
+  async function loadUser(name, leagueId) {
+    name = name.trim();
+    if (!name) return;
+    status(`Looking up ${name}…`);
+    try {
+      const user = await getJSON(`/user/${encodeURIComponent(name)}`);
+      if (!user || !user.user_id) { status(`No Sleeper user named "${name}". Check the spelling.`); return; }
+      const leagues = await getJSON(`/user/${user.user_id}/leagues/nfl/${leagueSeason()}`);
+      if (!leagues.length) { status(`${user.display_name} isn't in any ${leagueSeason()} leagues.`); return; }
+      const lg = leagues.find(l => l.league_id === leagueId) || leagues.find(l => l.league_id === DATA.league.id) || leagues[0];
+      $("league").innerHTML = leagues.map(l => `<option value="${l.league_id}" ${l.league_id === lg.league_id ? "selected" : ""}>${esc(l.name)}</option>`).join("");
+      $("league-field").hidden = leagues.length < 2;
+      const [rosters, users] = await Promise.all([getJSON(`/league/${lg.league_id}/rosters`), getJSON(`/league/${lg.league_id}/users`)]);
+      const mine = rosters.find(r => r.owner_id === user.user_id || (r.co_owners || []).includes(user.user_id));
+      if (!mine) { status(`${user.display_name} has no roster in ${lg.name}.`); return; }
+      const starters = new Set(mine.starters || []);
+      const order = Object.fromEntries(POS.map((p, i) => [p, i]));
+      const players = (mine.players || []).map(id => {
+        const info = DATA.players[id] || nameFromStats(id) || [id, "?", null];
+        return { id, name: info[0], pos: info[1], team: info[2], starter: starters.has(id) };
+      }).filter(p => POS.includes(p.pos))
+        .sort((a, b) => (b.starter - a.starter) || (order[a.pos] - order[b.pos]) || a.name.localeCompare(b.name));
+      const u = users.find(x => x.user_id === user.user_id);
+      state.roster = { team_name: (u && u.metadata && u.metadata.team_name) || user.display_name, players, league_id: lg.league_id, league_name: lg.name };
+      state.who = user.display_name;
+      status("");
+      render();
+    } catch (e) {
+      status("Couldn't reach Sleeper from this page. Live lookups work on the Pages site (tpaynect.github.io).");
+    }
+  }
+
+  $("members").innerHTML = DATA.league.members.map(([u, team]) => `<option value="${esc(u)}">${esc(team || u)}</option>`).join("");
+  $("who").value = state.who || (DATA.league.members.find(([, team]) => DATA.roster && team === DATA.roster.team_name) || [""])[0];
+  $("who-form").addEventListener("submit", e => { e.preventDefault(); loadUser($("who").value); });
+  $("who").addEventListener("change", () => loadUser($("who").value));
+  $("league").addEventListener("change", () => loadUser($("who").value, $("league").value));
+  if (state.who) loadUser(state.who);
 
   resetWeeks();
   $("foot").textContent = `Scored with your current league settings. Data updated ${DATA.generated.replace("T", " ")} UTC.`;
