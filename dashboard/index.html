@@ -43,7 +43,7 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(30px, 
 .field { display: grid; gap: 3px; }
 .field > span { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
 select, input[type="search"] { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-height: 36px; }
-input[type="search"] { width: 9.5em; }
+input[type="search"] { width: 13em; max-width: 100%; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .seg button { font: inherit; font-size: 14px; background: var(--bg); color: var(--fg); border: 0; padding: 6px 10px; min-height: 36px; cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--line); }
@@ -127,7 +127,7 @@ footer { color: var(--muted); font-size: 12px; }
 
   <nav class="tabs" id="tabs" aria-label="Views">
     <button type="button" data-view="board">Points allowed</button>
-    <button type="button" data-view="week">This week</button>
+    <button type="button" data-view="week">Matchups</button>
     <button type="button" data-view="team">My team</button>
   </nav>
 
@@ -154,7 +154,8 @@ footer { color: var(--muted); font-size: 12px; }
         <button type="button" data-adj="1">Schedule-adjusted</button>
       </div>
     </div>
-    <label class="field"><span>Team</span><input type="search" id="search" placeholder="e.g. DAL" autocomplete="off"></label>
+    <label class="field" id="mweek-field"><span>Matchup week</span><select id="mweek"></select></label>
+    <label class="field"><span>Team</span><input type="search" id="search" placeholder="e.g. DAL, Dallas, Cowboys" autocomplete="off"></label>
   </section>
 
   <div class="legend">
@@ -183,6 +184,25 @@ footer { color: var(--muted); font-size: 12px; }
 <script>
 (() => {
   const POS = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const TEAMS = {
+    ARI: "Arizona Cardinals", ATL: "Atlanta Falcons", BAL: "Baltimore Ravens", BUF: "Buffalo Bills",
+    CAR: "Carolina Panthers", CHI: "Chicago Bears", CIN: "Cincinnati Bengals", CLE: "Cleveland Browns",
+    DAL: "Dallas Cowboys", DEN: "Denver Broncos", DET: "Detroit Lions", GB: "Green Bay Packers",
+    HOU: "Houston Texans", IND: "Indianapolis Colts", JAX: "Jacksonville Jaguars", KC: "Kansas City Chiefs",
+    LAC: "Los Angeles Chargers", LAR: "Los Angeles Rams", LV: "Las Vegas Raiders", MIA: "Miami Dolphins",
+    MIN: "Minnesota Vikings", NE: "New England Patriots", NO: "New Orleans Saints", NYG: "New York Giants",
+    NYJ: "New York Jets", PHI: "Philadelphia Eagles", PIT: "Pittsburgh Steelers", SEA: "Seattle Seahawks",
+    SF: "San Francisco 49ers", TB: "Tampa Bay Buccaneers", TEN: "Tennessee Titans", WAS: "Washington Commanders"
+  };
+  const ALIASES = { TB: "bucs", SF: "niners", NE: "pats", JAX: "jags", WAS: "commies", PHI: "birds", LV: "oakland",
+    LAC: "bolts san diego", LAR: "st louis", GB: "pack", NYG: "g-men", KC: "kc", ARI: "cards", IND: "indy" };
+  // Matches an abbreviation ("TB"), a location ("tampa bay"), a nickname ("buccaneers") or a short form ("bucs").
+  function teamMatches(team, query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const name = ((TEAMS[team] || "") + " " + (ALIASES[team] || "")).toLowerCase();
+    return team.toLowerCase().startsWith(q) || name.includes(q) || name.replace(/\s+/g, "").includes(q.replace(/\s+/g, ""));
+  }
   const DATA = window.PA_DATA;
   const $ = id => document.getElementById(id);
   const fmt = n => (Math.round(n * 10) / 10).toFixed(1);
@@ -200,7 +220,9 @@ footer { color: var(--muted); font-size: 12px; }
     from: 1, to: 1, mode: saved.mode === "total" ? "total" : "avg",
     search: "", sort: saved.sort || "team", dir: saved.dir || 1, sel: null,
     view: ["board", "week", "team"].includes(saved.view) ? saved.view : "board",
-    adj: saved.adj === true
+    adj: saved.adj === true,
+    mweek: DATA.upcoming ? DATA.upcoming.week : null,
+    msort: "team", mdir: 1
   };
 
   function weeksOf(season) {
@@ -316,12 +338,15 @@ footer { color: var(--muted); font-size: 12px; }
       b.setAttribute("aria-pressed", on);
     });
     document.querySelectorAll("#mode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
+    const up = DATA.upcoming;
+    $("mweek-field").hidden = state.view === "board" || !up;
+    if (up) $("mweek").innerHTML = Object.keys(up.weeks).map(w => `<option value="${w}" ${+w === state.mweek ? "selected" : ""}>Week ${w}${+w === up.week ? " (next)" : ""}</option>`).join("");
     document.querySelectorAll("#adj button").forEach(b => b.setAttribute("aria-pressed", b.dataset.adj === (state.adj ? "1" : "0")));
   }
 
   function renderBoard(model) {
-    const q = state.search.trim().toUpperCase();
-    let list = model.list.filter(t => !q || t.team.includes(q));
+    const q = state.search.trim();
+    let list = model.list.filter(t => teamMatches(t.team, q));
     list.sort((a, b) => state.sort === "team"
       ? state.dir * a.team.localeCompare(b.team)
       : state.dir * (b.pos[state.sort].value - a.pos[state.sort].value));
@@ -329,9 +354,9 @@ footer { color: var(--muted); font-size: 12px; }
     let html = `<thead><tr><th scope="col"><button type="button" data-sort="team">TEAM${arrow("team")}</button></th>` +
       POS.map(p => `<th scope="col"><button type="button" data-sort="${p}">${p}${arrow(p)}<span class="avg">avg ${fmt(model.leagueAvg[p])}</span></button></th>`).join("") +
       `</tr></thead><tbody>`;
-    if (!list.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try a team abbreviation like DAL or KC.</td></tr>`;
+    if (!list.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname, like DAL, Dallas or Cowboys.</td></tr>`;
     for (const t of list) {
-      html += `<tr><th scope="row">${t.team}</th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}">${t.team}</th>` + POS.map(p => {
         const c = t.pos[p];
         const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
         return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
@@ -397,7 +422,8 @@ footer { color: var(--muted); font-size: 12px; }
     const same = state.season === up.season;
     const model = compute(up.season, same ? state.from : w[0], same ? state.to : w[w.length - 1], "avg", state.adj);
     model.opp = {};
-    for (const [away, home, date] of up.games) {
+    model.week = state.mweek;
+    for (const [away, home, date] of up.weeks[state.mweek] || []) {
       model.opp[away] = { team: home, at: "@", date };
       model.opp[home] = { team: away, at: "vs", date };
     }
@@ -411,14 +437,17 @@ footer { color: var(--muted); font-size: 12px; }
   function renderWeek() {
     const m = matchupModel(), el = $("week");
     if (!m) { el.innerHTML = `<tbody><tr><td class="empty">No upcoming games on the schedule.</td></tr></tbody>`; $("byes").textContent = ""; return; }
-    const q = state.search.trim().toUpperCase();
-    const order = DATA.upcoming.games.flatMap(([a, h]) => [a, h]).filter(t => !q || t.includes(q) || m.opp[t].team.includes(q));
-    let html = `<thead><tr><th scope="col"><button type="button" disabled>OFFENSE</button></th>` +
-      POS.map(p => `<th scope="col"><button type="button" disabled>${p}</button></th>`).join("") + `</tr></thead><tbody>`;
-    if (!order.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}".</td></tr>`;
+    const q = state.search.trim();
+    const diffOf = (team, p) => { const c = m.byTeam[m.opp[team].team]?.pos[p]; return c ? c.value - m.leagueAvg[p] : -Infinity; };
+    const order = Object.keys(m.opp).filter(t => teamMatches(t, q) || teamMatches(m.opp[t].team, q))
+      .sort((a, b) => state.msort === "team" ? state.mdir * a.localeCompare(b) : state.mdir * (diffOf(b, state.msort) - diffOf(a, state.msort)));
+    const arrow = k => state.msort === k ? `<span class="arrow">${state.mdir === 1 ? "▼" : "▲"}</span>` : "";
+    let html = `<thead><tr><th scope="col"><button type="button" data-msort="team">OFFENSE${arrow("team")}</button></th>` +
+      POS.map(p => `<th scope="col"><button type="button" data-msort="${p}">${p}${arrow(p)}</button></th>`).join("") + `</tr></thead><tbody>`;
+    if (!order.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname.</td></tr>`;
     for (const team of order) {
       const o = m.opp[team], d = m.byTeam[o.team];
-      html += `<tr><th scope="row">${team}<span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[team] || ""}">${team}<span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
         const c = d && d.pos[p];
         if (!c) return `<td class="cell">—</td>`;
         const diff = c.value - m.leagueAvg[p];
@@ -431,7 +460,7 @@ footer { color: var(--muted); font-size: 12px; }
     el.classList.add("matchup");
     const playing = new Set(Object.keys(m.opp));
     const byes = m.list.map(t => t.team).filter(t => !playing.has(t)).sort();
-    $("byes").textContent = byes.length ? `On bye in week ${DATA.upcoming.week}: ${byes.join(", ")}.` : "";
+    $("byes").textContent = byes.length ? `On bye in week ${m.week}: ${byes.join(", ")}.` : "";
   }
 
   function renderTeam() {
@@ -455,7 +484,7 @@ footer { color: var(--muted); font-size: 12px; }
           <b class="d ${diffCls(diff)}">${signed(diff)}</b><small>${o.team} allows ${fmt(c.value)} · #${c.rank}</small></span></div>`;
     };
     const starters = r.players.filter(p => p.starter), bench = r.players.filter(p => !p.starter);
-    el.innerHTML = `<div><div class="eyebrow">Week ${DATA.upcoming ? DATA.upcoming.week : "—"} matchups</div><h2>${r.team_name}</h2></div>
+    el.innerHTML = `<div><div class="eyebrow">Week ${m ? m.week : "—"} matchups</div><h2>${r.team_name}</h2></div>
       ${m ? `<p class="hint">Big number = points the opponent allows to that position above or below the league average, per game (${rangeText(m)}). Tap a player to see that defense's games.</p>` : ""}
       <div class="group-label">Starters</div>${starters.map(row).join("")}
       <div class="group-label">Bench</div>${bench.map(row).join("")}`;
@@ -469,7 +498,7 @@ footer { color: var(--muted); font-size: 12px; }
     const m = state.view === "board" ? null : matchupModel();
     $("legend-note").textContent = state.view === "board"
       ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}.`
-      : m ? `Week ${DATA.upcoming.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank.` : "";
+      : m ? `Week ${m.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank.` : "";
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
     if (state.view === "week") renderWeek();
     if (state.view === "team") renderTeam();
@@ -500,6 +529,13 @@ footer { color: var(--muted); font-size: 12px; }
     state.mode = b.dataset.mode; render();
   });
   $("search").addEventListener("input", e => { state.search = e.target.value; render(); });
+  $("mweek").addEventListener("change", e => { state.mweek = +e.target.value; render(); });
+  $("week").addEventListener("click", e => {
+    const s = e.target.closest("[data-msort]"); if (!s) return;
+    const k = s.dataset.msort;
+    state.mdir = state.msort === k ? -state.mdir : 1;
+    state.msort = k; render();
+  });
   $("adj").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     state.adj = b.dataset.adj === "1"; render();

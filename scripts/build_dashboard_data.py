@@ -3,7 +3,7 @@
 window.PA_DATA = {
   generated,
   seasons: {season: [[week, defense, position, points, [[name, team, pts, player_id], ...]], ...]},
-  upcoming: {season, week, games: [[away, home, date], ...]} or null,
+  upcoming: {season, week (next to play), weeks: {week: [[away, home, date], ...]}} or null,
   roster: {team_name, players: [{id, name, pos, team, starter}]} or null,
 }
 """
@@ -29,14 +29,14 @@ def seasons():
 
 
 def upcoming(state):
-    """The next week that still has games to play."""
-    games = [g for g in sleeper.schedule(state["season"]) if g["status"] not in ("complete", "canceled")]
-    if not games:
+    """Every regular-season week that still has games to play, keyed by week number."""
+    games = [g for g in sleeper.schedule(state["season"]) if g["status"] != "canceled"]
+    open_weeks = sorted({g["week"] for g in games if g["status"] != "complete"})
+    if not open_weeks:
         return None
-    week = min(g["week"] for g in games)
-    week_games = [g for g in sleeper.schedule(state["season"]) if g["week"] == week and g["status"] != "canceled"]
-    return {"season": state["season"], "week": week,
-            "games": [[g["away"], g["home"], g["date"]] for g in sorted(week_games, key=lambda g: g["date"])]}
+    weeks = {w: [[g["away"], g["home"], g["date"]] for g in sorted(games, key=lambda g: g["date"]) if g["week"] == w]
+             for w in open_weeks}
+    return {"season": state["season"], "week": open_weeks[0], "weeks": weeks}
 
 
 def roster(config):
