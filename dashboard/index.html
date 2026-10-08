@@ -518,17 +518,17 @@ footer { color: var(--muted); font-size: 12px; }
       .sort((a, b) => state.msort === "team" ? state.mdir * a.localeCompare(b) : state.mdir * (diffOf(b, state.msort) - diffOf(a, state.msort)));
     const arrow = k => state.msort === k ? `<span class="arrow">${state.mdir === 1 ? "▼" : "▲"}</span>` : "";
     let html = `<thead><tr><th scope="col"><button type="button" data-msort="team">OFFENSE${arrow("team")}</button></th>` +
-      POS.map(p => `<th scope="col"><button type="button" data-msort="${p}">${p}${arrow(p)}</button></th>`).join("") + `</tr></thead><tbody>`;
-    if (!order.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname.</td></tr>`;
+      COLS.map(p => `<th scope="col" class="${p === "ALL" ? "all" : ""}"><button type="button" data-msort="${p}">${p}${arrow(p)}</button></th>`).join("") + `</tr></thead><tbody>`;
+    if (!order.length) html += `<tr><td colspan="8" class="empty">No team matches "${q}". Try an abbreviation, city or nickname.</td></tr>`;
     for (const team of order) {
       const o = m.opp[team], d = m.byTeam[o.team];
-      html += `<tr><th scope="row" title="${TEAMS[team] || ""}"><span class="tm">${team}${logo(team)}</span><span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[team] || ""}"><span class="tm">${team}${logo(team)}</span><span class="opp-of">${o.at} ${o.team}</span></th>` + COLS.map(p => {
         const c = d && d.pos[p];
         if (!c) return `<td class="cell">—</td>`;
         const diff = c.value - m.leagueAvg[p];
         return `<td class="cell" tabindex="0" role="button" data-team="${o.team}" data-pos="${p}"
           aria-label="${team} ${p} faces ${o.team}, which allows ${signed(diff)} vs average, rank ${c.rank}"
-          style="background:${cellColor(c.value, m.leagueAvg[p])}"><span class="v">${signed(diff)}</span><span class="r">#${c.rank}</span></td>`;
+          style="background:${cellColor(c.value, m.leagueAvg[p], p === "ALL" ? 0.12 : 0.4)}"><span class="v">${signed(diff)}</span><span class="r">#${c.rank}</span></td>`;
       }).join("") + `</tr>`;
     }
     el.innerHTML = html + "</tbody>";
@@ -574,7 +574,7 @@ footer { color: var(--muted); font-size: 12px; }
     const m = state.view === "board" ? null : matchupModel();
     $("legend-note").textContent = state.view === "board"
       ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}. ALL = QB + RB + WR + TE + K (DEF left out).`
-      : m ? `Week ${m.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank.` : "";
+      : m ? `Week ${m.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank. ALL = QB + RB + WR + TE + K (DEF left out).` : "";
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
     if (state.view === "week") renderWeek();
     if (state.view === "team") renderTeam();
