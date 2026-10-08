@@ -51,7 +51,7 @@ input[type="search"] { width: 13em; max-width: 100%; }
 button:focus-visible, select:focus-visible, input:focus-visible, td.cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-.tabs button { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: .03em; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 8px 12px 6px; cursor: pointer; white-space: nowrap; }
+.tabs button { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: .02em; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 8px 8px 6px; cursor: pointer; white-space: nowrap; }
 .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 .view { display: grid; gap: 18px; }
 .matchup th[scope="row"] .opp-of { display: block; font-family: var(--font-body); font-weight: 400; font-size: 12px; color: var(--muted); }
@@ -79,6 +79,14 @@ button:focus-visible, select:focus-visible, input:focus-visible, td.cell:focus-v
 #who-status { flex-basis: 100%; }
 #who-status:empty { display: none; }
 .group-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin-top: 6px; }
+.ph { flex-basis: 100%; margin: 0; font-family: var(--font-display); font-size: 17px; letter-spacing: .04em; text-transform: uppercase; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ph small { font-family: var(--font-body); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; }
+#sospre-field { flex-basis: 100%; }
+#sospre button { font-size: 13px; padding-inline: 9px; }
+.opp-of { display: block; font-family: var(--font-body); font-weight: 400; font-size: 11px; color: var(--muted); }
+.sosw { display: grid; grid-template-columns: 3.4em 1fr auto; gap: 6px 10px; align-items: center; border-top: 1px solid var(--line); padding-top: 8px; font-variant-numeric: tabular-nums; }
+.sosw .lbl { font-family: var(--font-display); font-weight: 600; color: var(--muted); }
+.sosw .opp { display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; color: var(--muted); }
 .ramp { display: inline-flex; align-items: center; gap: 6px; }
 .ramp i { display: inline-block; width: 88px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--bad), var(--surface-2), var(--good)); }
@@ -152,10 +160,12 @@ footer { color: var(--muted); font-size: 12px; }
   <nav class="tabs" id="tabs" aria-label="Views">
     <button type="button" data-view="board">Points allowed</button>
     <button type="button" data-view="week">Matchups</button>
+    <button type="button" data-view="sos">SOS</button>
     <button type="button" data-view="team">My team</button>
   </nav>
 
-  <section class="controls" aria-label="Filters">
+  <section class="controls" aria-label="Data">
+    <h3 class="ph">Data <small>Which past games the numbers come from</small></h3>
     <label class="field"><span>Season</span><select id="season"></select></label>
     <label class="field"><span>From week</span><select id="from"></select></label>
     <label class="field"><span>To week</span><select id="to"></select></label>
@@ -166,6 +176,10 @@ footer { color: var(--muted); font-size: 12px; }
         <button type="button" data-n="0">All</button>
       </div>
     </div>
+  </section>
+
+  <section class="controls" aria-label="View">
+    <h3 class="ph">View <small>How the results are shown</small></h3>
     <div class="field"><span>Show</span>
       <div class="seg" id="mode">
         <button type="button" data-mode="avg">Per game</button>
@@ -179,6 +193,16 @@ footer { color: var(--muted); font-size: 12px; }
       </div>
     </div>
     <label class="field" id="mweek-field"><span>Matchup week</span><select id="mweek"></select></label>
+    <label class="field" id="sosfrom-field"><span>From week</span><select id="sosfrom"></select></label>
+    <label class="field" id="sosto-field"><span>To week</span><select id="sosto"></select></label>
+    <div class="field" id="sospre-field"><span>Preset</span>
+      <div class="seg" id="sospre">
+        <button type="button" data-pre="rest">Rest of season</button>
+        <button type="button" data-pre="playoffs">Playoffs</button>
+        <button type="button" data-pre="3">Next 3</button>
+        <button type="button" data-pre="6">Next 6</button>
+      </div>
+    </div>
     <label class="field"><span>Team</span><input type="search" id="search" placeholder="e.g. DAL, Dallas, Cowboys" autocomplete="off"></label>
   </section>
 
@@ -195,6 +219,11 @@ footer { color: var(--muted); font-size: 12px; }
   <div id="view-week" class="view" hidden>
     <div class="board"><table id="week" aria-label="Upcoming matchups by offense and position"></table></div>
     <p class="hint" id="byes"></p>
+  </div>
+
+  <div id="view-sos" class="view" hidden>
+    <div class="board"><table id="sos" aria-label="Strength of schedule by offense and position"></table></div>
+    <section class="detail" id="sos-detail" aria-live="polite"></section>
   </div>
 
   <div id="view-team" class="view" hidden>
@@ -271,10 +300,12 @@ footer { color: var(--muted); font-size: 12px; }
     season: seasons.includes(saved.season) ? saved.season : seasons[0],
     from: 1, to: 1, mode: saved.mode === "total" ? "total" : "avg",
     search: "", sort: saved.sort || "team", dir: saved.dir || 1, sel: null,
-    view: ["board", "week", "team"].includes(saved.view) ? saved.view : "board",
+    view: ["board", "week", "sos", "team"].includes(saved.view) ? saved.view : "board",
     adj: saved.adj === true,
     mweek: DATA.upcoming ? DATA.upcoming.week : null,
     msort: "team", mdir: 1,
+    ssort: "team", sdir: 1, ssel: null,
+    sosFrom: null, sosTo: null,
     roster: DATA.roster ? { ...DATA.roster, league_id: DATA.league.id, league_name: DATA.league.name } : null,
     who: saved.who || ""
   
@@ -399,7 +430,15 @@ footer { color: var(--muted); font-size: 12px; }
     });
     document.querySelectorAll("#mode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
     const up = DATA.upcoming;
-    $("mweek-field").hidden = state.view === "board" || !up;
+    $("mweek-field").hidden = !["week", "team"].includes(state.view) || !up;
+    for (const id of ["sosfrom-field", "sosto-field", "sospre-field"]) $(id).hidden = state.view !== "sos" || !up;
+    if (up) {
+      const opts = sel => Object.keys(up.weeks).map(w => `<option value="${w}" ${+w === sel ? "selected" : ""}>Week ${w}</option>`).join("");
+      $("sosfrom").innerHTML = opts(state.sosFrom);
+      $("sosto").innerHTML = opts(state.sosTo);
+      const pre = sosPresets();
+      document.querySelectorAll("#sospre button").forEach(b => { const r = pre[b.dataset.pre]; b.setAttribute("aria-pressed", !!r && r[0] === state.sosFrom && r[1] === state.sosTo); });
+    }
     if (up) $("mweek").innerHTML = Object.keys(up.weeks).map(w => `<option value="${w}" ${+w === state.mweek ? "selected" : ""}>Week ${w}${+w === up.week ? " (next)" : ""}</option>`).join("");
     document.querySelectorAll("#adj button").forEach(b => b.setAttribute("aria-pressed", b.dataset.adj === (state.adj ? "1" : "0")));
   }
@@ -490,18 +529,23 @@ footer { color: var(--muted); font-size: 12px; }
 
   // Upcoming matchups always use the current season: the selected week range when it is the
   // current season, otherwise the whole current season so far. Always per game.
+  function oppFor(week) {
+    const opp = {};
+    for (const [away, home, date] of (DATA.upcoming && DATA.upcoming.weeks[week]) || []) {
+      opp[away] = { team: home, at: "@", date };
+      opp[home] = { team: away, at: "vs", date };
+    }
+    return opp;
+  }
+
   function matchupModel() {
     const up = DATA.upcoming;
     if (!up || !DATA.seasons[up.season]) return null;
     const w = weeksOf(up.season);
     const same = state.season === up.season;
     const model = compute(up.season, same ? state.from : w[0], same ? state.to : w[w.length - 1], "avg", state.adj);
-    model.opp = {};
+    model.opp = oppFor(state.mweek);
     model.week = state.mweek;
-    for (const [away, home, date] of up.weeks[state.mweek] || []) {
-      model.opp[away] = { team: home, at: "@", date };
-      model.opp[home] = { team: away, at: "vs", date };
-    }
     return model;
   }
 
@@ -538,6 +582,63 @@ footer { color: var(--muted); font-size: 12px; }
     $("byes").textContent = byes.length ? `On bye in week ${m.week}: ${byes.join(", ")}.` : "";
   }
 
+  // Strength of schedule: for each offense, add up its opponents' points allowed (vs league
+  // average, per game) across the chosen upcoming weeks. Byes add nothing.
+  function sosModel() {
+    const m = matchupModel();
+    if (!m) return null;
+    const weeks = Object.keys(DATA.upcoming.weeks).map(Number).filter(w => w >= state.sosFrom && w <= state.sosTo);
+    const opps = weeks.map(w => [w, oppFor(w)]);
+    const rows = m.list.map(t => {
+      const games = opps.filter(([, o]) => o[t.team]).map(([w, o]) => ({ wk: w, ...o[t.team] }));
+      const pos = {};
+      for (const p of COLS) {
+        const parts = games.map(g => { const c = m.byTeam[g.team]?.pos[p]; return c ? c.value - m.leagueAvg[p] : 0; });
+        const sum = parts.reduce((s, x) => s + x, 0);
+        pos[p] = { sum, perGame: games.length ? sum / games.length : 0 };
+        pos[p].value = state.mode === "avg" ? pos[p].perGame : sum;
+      }
+      return { team: t.team, games, byes: weeks.filter(w => !games.some(g => g.wk === w)), pos };
+    });
+    for (const p of COLS) [...rows].sort((a, b) => b.pos[p].value - a.pos[p].value).forEach((r, i) => { r.pos[p].rank = i + 1; });
+    return { m, rows, weeks };
+  }
+
+  function renderSOS() {
+    const s = sosModel(), el = $("sos");
+    if (!s) { el.innerHTML = `<tbody><tr><td class="empty">No upcoming games on the schedule.</td></tr></tbody>`; $("sos-detail").innerHTML = ""; return; }
+    const q = state.search.trim();
+    const rows = s.rows.filter(r => teamMatches(r.team, q))
+      .sort((a, b) => state.ssort === "team" ? state.sdir * a.team.localeCompare(b.team) : state.sdir * (b.pos[state.ssort].value - a.pos[state.ssort].value));
+    const arrow = k => state.ssort === k ? `<span class="arrow">${state.sdir === 1 ? "▼" : "▲"}</span>` : "";
+    let html = `<thead><tr><th scope="col"><button type="button" data-ssort="team">OFFENSE${arrow("team")}</button></th>` +
+      COLS.map(p => `<th scope="col" class="${p === "ALL" ? "all" : ""}"><button type="button" data-ssort="${p}">${p}${arrow(p)}</button></th>`).join("") + `</tr></thead><tbody>`;
+    if (!rows.length) html += `<tr><td colspan="8" class="empty">No team matches "${esc(q)}".</td></tr>`;
+    for (const r of rows) {
+      html += `<tr><th scope="row" title="${TEAMS[r.team] || ""}"><span class="tm">${r.team}${logo(r.team)}</span><span class="opp-of">${r.games.length} gms</span></th>` + COLS.map(p => {
+        const c = r.pos[p], L = s.m.leagueAvg[p];
+        const sel = state.ssel && state.ssel.team === r.team && state.ssel.pos === p;
+        return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-steam="${r.team}" data-spos="${p}"
+          aria-label="${r.team} ${p} schedule ${signed(c.value)}, rank ${c.rank}"
+          style="background:${cellColor(L + c.perGame, L, p === "ALL" ? 0.12 : 0.4)}"><span class="v">${signed(c.value)}</span><span class="r">#${c.rank}</span></td>`;
+      }).join("") + `</tr>`;
+    }
+    el.innerHTML = html + "</tbody>";
+    const d = $("sos-detail"), r = state.ssel && s.rows.find(x => x.team === state.ssel.team);
+    if (!r) { d.innerHTML = `<p class="hint">Tap a cell to see that team's opponents week by week.</p>`; return; }
+    const p = state.ssel.pos, c = r.pos[p];
+    const lines = s.weeks.map(w => {
+      const g = r.games.find(x => x.wk === w);
+      if (!g) return `<div class="sosw"><span class="lbl">Wk ${w}</span><span class="opp">Bye</span><span></span></div>`;
+      const oc = s.m.byTeam[g.team]?.pos[p], diff = oc ? oc.value - s.m.leagueAvg[p] : 0;
+      return `<div class="sosw"><span class="lbl">Wk ${w}</span><span class="opp">${g.at} ${logo(g.team)}${g.team}</span>
+        <span><b class="d ${diffCls(diff)}">${signed(diff)}</b> <small class="note">#${oc ? oc.rank : "—"}</small></span></div>`;
+    }).join("");
+    d.innerHTML = `<div><div class="eyebrow">Weeks ${state.sosFrom}–${state.sosTo}</div><h2>${r.team} ${p === "ALL" ? "offense" : p + "s"}: ${signed(c.value)} <span class="pill ${tier(c.rank, s.rows.length)[0]}">${tier(c.rank, s.rows.length)[1].replace("matchup", "schedule")}</span></h2></div>
+      <p class="hint">Each opponent's points allowed to ${p === "ALL" ? "offenses" : p + "s"} vs the league average, per game (${rangeText(s.m)}). Small number = that defense's rank.</p>
+      <div class="weeks">${lines}</div>`;
+  }
+
   function renderTeam() {
     const el = $("team"), r = state.roster, m = matchupModel();
     if (!r) { el.innerHTML = `<p class="hint">Pick a username above to load a team.</p>`; return; }
@@ -570,14 +671,17 @@ footer { color: var(--muted); font-size: 12px; }
     const model = compute();
     renderControls();
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === state.view));
-    for (const v of ["board", "week", "team"]) $("view-" + v).hidden = v !== state.view;
+    for (const v of ["board", "week", "sos", "team"]) $("view-" + v).hidden = v !== state.view;
     const m = state.view === "board" ? null : matchupModel();
-    $("legend-note").textContent = state.view === "board"
+    $("legend-note").textContent = state.view === "sos"
+      ? (m ? `Each cell adds up the opponents' points allowed vs league average across weeks ${state.sosFrom}–${state.sosTo} (${state.mode === "avg" ? "per game" : "total"}; based on ${rangeText(m)}). Higher = easier schedule. Small number = rank.` : "")
+      : state.view === "board"
       ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}. ALL = QB + RB + WR + TE + K (DEF left out).`
       : m ? `Week ${m.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank. ALL = QB + RB + WR + TE + K (DEF left out).` : "";
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
     if (state.view === "week") renderWeek();
     if (state.view === "team") renderTeam();
+    if (state.view === "sos") renderSOS();
     store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir, view: state.view, adj: state.adj, who: state.who });
   }
 
@@ -605,6 +709,33 @@ footer { color: var(--muted); font-size: 12px; }
     state.mode = b.dataset.mode; render();
   });
   $("search").addEventListener("input", e => { state.search = e.target.value; render(); });
+  function sosPresets() {
+    const up = DATA.upcoming;
+    if (!up) return {};
+    const ws = Object.keys(up.weeks).map(Number), first = ws[0], last = ws[ws.length - 1], clamp = w => Math.min(w, last);
+    return {
+      rest: [first, Math.max(first, clamp(14))],
+      playoffs: [Math.max(first, 15), clamp(17)],
+      3: [first, clamp(first + 2)],
+      6: [first, clamp(first + 5)]
+    };
+  }
+  { const r = sosPresets().rest; if (r) [state.sosFrom, state.sosTo] = r; }
+  $("sospre").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    [state.sosFrom, state.sosTo] = sosPresets()[b.dataset.pre]; render();
+  });
+  $("sosfrom").addEventListener("change", e => { state.sosFrom = +e.target.value; if (state.sosTo < state.sosFrom) state.sosTo = state.sosFrom; render(); });
+  $("sosto").addEventListener("change", e => { state.sosTo = +e.target.value; if (state.sosFrom > state.sosTo) state.sosFrom = state.sosTo; render(); });
+  $("sos").addEventListener("click", e => {
+    const s = e.target.closest("[data-ssort]");
+    if (s) { const k = s.dataset.ssort; state.sdir = state.ssort === k ? -state.sdir : 1; state.ssort = k; render(); return; }
+    const c = e.target.closest("[data-steam]");
+    if (c) { state.ssel = { team: c.dataset.steam, pos: c.dataset.spos }; render(); $("sos-detail").scrollIntoView({ block: "start" }); }
+  });
+  $("sos").addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-steam]")) { e.preventDefault(); e.target.click(); }
+  });
   $("mweek").addEventListener("change", e => { state.mweek = +e.target.value; render(); });
   $("week").addEventListener("click", e => {
     const s = e.target.closest("[data-msort]"); if (!s) return;
