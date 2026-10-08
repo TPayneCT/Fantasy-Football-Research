@@ -135,6 +135,7 @@ th.all, td.cell[data-pos="ALL"] { border-left: 2px solid var(--fg); }
 .d.up { color: var(--good); }
 .d.down { color: var(--bad); }
 .wk .note { font-size: 12px; color: var(--muted); }
+.back { justify-self: start; font: inherit; font-size: 14px; font-weight: 600; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 footer { color: var(--muted); font-size: 12px; }
 @media (max-width: 520px) {
@@ -225,6 +226,7 @@ footer { color: var(--muted); font-size: 12px; }
   <div id="view-week" class="view" hidden>
     <div class="board"><table id="week" aria-label="Upcoming matchups by offense and position"></table></div>
     <p class="hint" id="byes"></p>
+    <section class="detail" id="detail-week" aria-live="polite" hidden></section>
   </div>
 
   <div id="view-sos" class="view" hidden>
@@ -244,6 +246,7 @@ footer { color: var(--muted); font-size: 12px; }
       <p class="hint" id="who-status" aria-live="polite"></p>
     </form>
     <section class="team" id="team"></section>
+    <section class="detail" id="detail-team" aria-live="polite" hidden></section>
   </div>
 
   <footer id="foot"></footer>
@@ -307,6 +310,7 @@ footer { color: var(--muted); font-size: 12px; }
     from: 1, to: 1, mode: saved.mode === "total" ? "total" : "avg",
     search: "", sort: saved.sort || "team", dir: saved.dir || 1, sel: null,
     view: ["board", "week", "sos", "team"].includes(saved.view) ? saved.view : "board",
+    wsel: null, tsel: null,
     adj: saved.adj === true,
     noTd: saved.noTd === true,
     mweek: DATA.upcoming ? DATA.upcoming.week : null,
@@ -419,7 +423,7 @@ footer { color: var(--muted); font-size: 12px; }
     leagueAvg.ALL = OFF.reduce((s, p) => s + leagueAvg[p], 0);
     [...list].sort((a, b) => b.pos.ALL.value - a.pos.ALL.value).forEach((t, i) => { t.pos.ALL.rank = i + 1; });
     const byTeam = Object.fromEntries(list.map(t => [t.team, t]));
-    return { list, byTeam, leagueAvg, n: list.length, offense, player, season, from, to };
+    return { list, byTeam, leagueAvg, n: list.length, offense, player, season, from, to, mode };
   }
 
   function cellColor(v, avg, spread = 0.4) {
@@ -486,14 +490,15 @@ footer { color: var(--muted); font-size: 12px; }
     $("board").innerHTML = html + "</tbody>";
   }
 
-  function renderDetail(model) {
-    const el = $("detail");
-    const t = state.sel && model.list.find(x => x.team === state.sel.team);
+  // Drilldown for one defense and position. Shown under whichever tab it was opened from.
+  function renderDetail(model, el = $("detail"), sel = state.sel, back = null) {
+    const t = sel && model.list.find(x => x.team === sel.team);
+    el.hidden = !t && !!back;
     if (!t) {
       el.innerHTML = `<p class="hint">Tap a number in the board to see which players scored those points, week by week.</p>`;
       return;
     }
-    const p = state.sel.pos, c = t.pos[p];
+    const p = sel.pos, c = t.pos[p];
     const [cls, label] = tier(c.rank, model.n);
     const diff = c.value - model.leagueAvg[p];
     // Expected (adjusted) or the offense's average (raw) for one position-week.
@@ -525,17 +530,18 @@ footer { color: var(--muted); font-size: 12px; }
         <span class="note">${fmt(base)} ${adj ? "expected" : "avg"}</span>`;
     };
     el.innerHTML = `
-      <div><div class="eyebrow">${state.season} · weeks ${state.from}–${state.to}</div>
+      ${back ? `<button type="button" class="back" data-back="${back[0]}">↑ Back to ${back[1]}</button>` : ""}
+      <div><div class="eyebrow">${model.season} · weeks ${model.from}–${model.to}</div>
       <h2>${t.team} vs ${p === "ALL" ? "all offense" : p} <span class="pill ${cls}">${label}</span></h2></div>
       <div class="stats">
-        <div class="stat"><b>${fmt(c.value)}</b><span>${state.adj ? "Adjusted " : ""}${state.mode === "avg" ? "per game" : "total"}</span></div>
+        <div class="stat"><b>${fmt(c.value)}</b><span>${state.adj ? "Adjusted " : ""}${model.mode === "avg" ? "per game" : "total"}</span></div>
         <div class="stat"><b>#${c.rank}</b><span>of ${model.n}</span></div>
         <div class="stat"><b>${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))}</b><span>vs league avg</span></div>
         <div class="stat"><b>${t.games.size}</b><span>Games</span></div>
       </div>
       <p class="hint">${state.adj
-        ? `Schedule-adjusted: next to each opponent is how far the game beat or missed what that offense's ${p}s were expected to score, based on their other ${state.season} games and the defenses they faced. Player numbers compare with each player's own per-game average.`
-        : `Green and red numbers compare each game with that offense's or player's own per-game average for ${state.season}, weeks ${state.from}–${state.to}.`}</p>
+        ? `Schedule-adjusted: next to each opponent is how far the game beat or missed what that offense's ${p}s were expected to score, based on their other ${model.season} games and the defenses they faced. Player numbers compare with each player's own per-game average.`
+        : `Green and red numbers compare each game with that offense's or player's own per-game average for ${model.season}, weeks ${model.from}–${model.to}.`}</p>
       <div class="weeks">${weeks.map(w => `
         <div class="wk"><div class="side"><span class="lbl">Week ${w.wk} ${w.players[0] ? logo(w.players[0][1]) : ""}</span>
           ${oppLine(w)}</div>
@@ -700,20 +706,22 @@ footer { color: var(--muted); font-size: 12px; }
       ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}. ALL = QB + RB + WR + TE + K (DEF left out).`
       : m ? `Week ${m.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank. ALL = QB + RB + WR + TE + K (DEF left out).` : "";
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
-    if (state.view === "week") renderWeek();
-    if (state.view === "team") renderTeam();
+    if (state.view === "week") { renderWeek(); if (m) renderDetail(m, $("detail-week"), state.wsel, ["week", "matchups"]); }
+    if (state.view === "team") { renderTeam(); if (m) renderDetail(m, $("detail-team"), state.tsel, ["team", "your team"]); }
     if (state.view === "sos") renderSOS();
     store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir, view: state.view, adj: state.adj, noTd: state.noTd, who: state.who });
   }
 
+  // Matchups and My team open the drilldown in place, below their own table.
   function openDetail(team, pos) {
-    const up = DATA.upcoming;
-    if (up && state.view !== "board" && state.season !== up.season) { state.season = up.season; resetWeeks(); }
-    state.view = "board";
-    state.sel = { team, pos };
+    if (state.view === "week") state.wsel = { team, pos }; else state.tsel = { team, pos };
     render();
-    $("detail").scrollIntoView({ block: "start" });
+    $("detail-" + state.view).scrollIntoView({ block: "start" });
   }
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-back]");
+    if (b) $("view-" + b.dataset.back).scrollIntoView({ block: "start" });
+  });
 
   $("season").addEventListener("change", e => { state.season = e.target.value; resetWeeks(); render(); });
   $("from").addEventListener("change", e => { state.from = +e.target.value; if (state.to < state.from) state.to = state.from; render(); });
