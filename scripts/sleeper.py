@@ -50,3 +50,16 @@ def schedule(season, refresh=False):
 
 def matchups(league_id, week):
     return get(f"/league/{league_id}/matchups/{week}")
+
+
+def league_users(league_id):
+    return get(f"/league/{league_id}/users")
+
+
+def rosters(league_id):
+    return get(f"/league/{league_id}/rosters")
+
+
+def players(refresh=False):
+    """All NFL players keyed by player_id (about 5 MB, cached)."""
+    return get("/players/nfl", "players.json", refresh)

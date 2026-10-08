@@ -16,7 +16,8 @@ POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
 
 
 def completed_weeks(season, state):
-    games = sleeper.schedule(season, refresh=str(season) == state["season"])
+    games = [g for g in sleeper.schedule(season, refresh=str(season) == state["season"])
+             if g["status"] != "canceled"]
     return sorted({g["week"] for g in games}
                   - {g["week"] for g in games if g["status"] != "complete"})
 
