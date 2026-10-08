@@ -97,21 +97,27 @@ tbody tr:hover th { color: var(--accent); }
 .pill.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
 .pill.mid { background: var(--surface-2); color: var(--muted); }
 .weeks { display: grid; gap: 8px; }
-.wk { display: grid; grid-template-columns: 4.2em 1fr auto; gap: 4px 10px; align-items: baseline; border-top: 1px solid var(--line); padding-top: 8px; }
+.wk { display: grid; grid-template-columns: 6.6em minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; border-top: 1px solid var(--line); padding-top: 10px; }
+.wk .side { display: grid; gap: 3px; }
 .wk .lbl { font-family: var(--font-display); font-weight: 600; color: var(--muted); }
-.wk .opp { font-weight: 600; }
+.wk .opp { font-weight: 700; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.logo { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 50%; font: 700 7.5px/1 var(--font-body); letter-spacing: 0; overflow: hidden; vertical-align: middle; }
+.logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+th .logo { margin-right: 6px; }
 .wk .tot { font-family: var(--font-display); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
-.wk ul { grid-column: 2 / 4; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; min-width: 0; }
+.wk .tot { grid-column: 3; grid-row: 1; }
+.wk ul { grid-column: 2; grid-row: 1; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; min-width: 0; }
 .wk li b { font-variant-numeric: tabular-nums; }
 .wk li.zero { color: var(--muted); }
 .d { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
 .d.up { color: var(--good); }
 .d.down { color: var(--bad); }
-.wk .note { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.wk .note { font-size: 12px; color: var(--muted); }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 footer { color: var(--muted); font-size: 12px; }
 @media (max-width: 520px) {
   tbody th { padding: 0 6px; font-size: 15px; }
+  th .logo { width: 18px; height: 18px; margin-right: 4px; }
   td.cell { min-width: 46px; padding: 6px 2px; }
   td.cell .v { font-size: 15px; }
 }
@@ -194,6 +200,21 @@ footer { color: var(--muted); font-size: 12px; }
     NYJ: "New York Jets", PHI: "Philadelphia Eagles", PIT: "Pittsburgh Steelers", SEA: "Seattle Seahawks",
     SF: "San Francisco 49ers", TB: "Tampa Bay Buccaneers", TEN: "Tennessee Titans", WAS: "Washington Commanders"
   };
+  const COLORS = {
+    ARI: ["#97233F", "#fff"], ATL: ["#A71930", "#fff"], BAL: ["#241773", "#fff"], BUF: ["#00338D", "#fff"],
+    CAR: ["#0085CA", "#101820"], CHI: ["#0B162A", "#fff"], CIN: ["#FB4F14", "#000"], CLE: ["#311D00", "#FF3C00"],
+    DAL: ["#003594", "#fff"], DEN: ["#FB4F14", "#002244"], DET: ["#0076B6", "#fff"], GB: ["#203731", "#FFB612"],
+    HOU: ["#03202F", "#fff"], IND: ["#002C5F", "#fff"], JAX: ["#006778", "#fff"], KC: ["#E31837", "#fff"],
+    LAC: ["#0080C6", "#fff"], LAR: ["#003594", "#FFD100"], LV: ["#000000", "#A5ACAF"], MIA: ["#008E97", "#fff"],
+    MIN: ["#4F2683", "#FFC62F"], NE: ["#002244", "#fff"], NO: ["#101820", "#D3BC8D"], NYG: ["#0B2265", "#fff"],
+    NYJ: ["#125740", "#fff"], PHI: ["#004C54", "#fff"], PIT: ["#101820", "#FFB612"], SEA: ["#002244", "#69BE28"],
+    SF: ["#AA0000", "#B3995D"], TB: ["#D50A0A", "#fff"], TEN: ["#0C2340", "#4B92DB"], WAS: ["#5A1414", "#FFB612"]
+  };
+  // Sleeper's logo where the browser can load it; otherwise a badge in team colors.
+  function logo(team) {
+    const [bg, fg] = COLORS[team] || ["var(--surface-2)", "var(--fg)"];
+    return `<span class="logo" style="background:${bg};color:${fg}" aria-hidden="true">${team}<img src="https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png" alt="" onload="this.style.background='var(--surface)'" onerror="this.remove()"></span>`;
+  }
   const ALIASES = { TB: "bucs", SF: "niners", NE: "pats", JAX: "jags", WAS: "commies", PHI: "birds", LV: "oakland",
     LAC: "bolts san diego", LAR: "st louis", GB: "pack", NYG: "g-men", KC: "kc", ARI: "cards", IND: "indy" };
   // Matches an abbreviation ("TB"), a location ("tampa bay"), a nickname ("buccaneers") or a short form ("bucs").
@@ -356,7 +377,7 @@ footer { color: var(--muted); font-size: 12px; }
       `</tr></thead><tbody>`;
     if (!list.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname, like DAL, Dallas or Cowboys.</td></tr>`;
     for (const t of list) {
-      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}">${t.team}</th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}">${logo(t.team)}${t.team}</th>` + POS.map(p => {
         const c = t.pos[p];
         const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
         return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
@@ -381,14 +402,11 @@ footer { color: var(--muted); font-size: 12px; }
     const oppLine = w => {
       const team = w.players[0] && w.players[0][1];
       if (!team) return `<span class="opp">—</span>`;
-      if (state.adj && w.exp != null) {
-        const d = w.pts - w.exp;
-        return `<span class="opp">vs ${team} <span class="d ${diffCls(d)}">${signed(d)}</span>
-          <span class="note">vs ${fmt(w.exp)} expected for ${team}</span></span>`;
-      }
-      const o = model.offense[team + "|" + p], avg = o.total / o.games, d = w.pts - avg;
-      return `<span class="opp">vs ${team} <span class="d ${diffCls(d)}">${signed(d)}</span>
-        <span class="note">vs ${team}'s ${fmt(avg)} avg</span></span>`;
+      const adj = state.adj && w.exp != null;
+      const base = adj ? w.exp : model.offense[team + "|" + p].total / model.offense[team + "|" + p].games;
+      const d = w.pts - base;
+      return `<span class="opp" title="${TEAMS[team] || ""}">${logo(team)}${team} <span class="d ${diffCls(d)}">${signed(d)}</span></span>
+        <span class="note">${fmt(base)} ${adj ? "expected" : "avg"}</span>`;
     };
     el.innerHTML = `
       <div><div class="eyebrow">${state.season} · weeks ${state.from}–${state.to}</div>
@@ -403,8 +421,8 @@ footer { color: var(--muted); font-size: 12px; }
         ? `Schedule-adjusted: next to each opponent is how far the game beat or missed what that offense's ${p}s were expected to score, based on their other ${state.season} games and the defenses they faced. Player numbers compare with each player's own per-game average.`
         : `Green and red numbers compare each game with that offense's or player's own per-game average for ${state.season}, weeks ${state.from}–${state.to}.`}</p>
       <div class="weeks">${weeks.map(w => `
-        <div class="wk"><span class="lbl">Week ${w.wk}</span>
-          ${oppLine(w)}
+        <div class="wk"><div class="side"><span class="lbl">Week ${w.wk}</span>
+          ${oppLine(w)}</div>
           <span class="tot">${fmt(w.pts)}</span>
           <ul>${w.players.map(([n, , pts, id]) => {
             const pl = model.player[id], d = pts - pl.total / pl.games;
@@ -447,7 +465,7 @@ footer { color: var(--muted); font-size: 12px; }
     if (!order.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname.</td></tr>`;
     for (const team of order) {
       const o = m.opp[team], d = m.byTeam[o.team];
-      html += `<tr><th scope="row" title="${TEAMS[team] || ""}">${team}<span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[team] || ""}">${logo(team)}${team}<span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
         const c = d && d.pos[p];
         if (!c) return `<td class="cell">—</td>`;
         const diff = c.value - m.leagueAvg[p];
