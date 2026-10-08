@@ -1,0 +1,45 @@
+name: Publish dashboard
+
+on:
+  push:
+    branches: [main]
+    paths: ["dashboard/**"]
+  workflow_run:
+    workflows: ["Update fantasy data"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Build site
+        run: |
+          mkdir _site
+          {
+            echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            echo '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+            cat dashboard/index.html
+          } > _site/index.html
+          cp dashboard/data.js _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
