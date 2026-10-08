@@ -103,7 +103,8 @@ tbody tr:hover th { color: var(--accent); }
 .wk .opp { font-weight: 700; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .logo { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 50%; font: 700 7.5px/1 var(--font-body); letter-spacing: 0; overflow: hidden; vertical-align: middle; }
 .logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-th .logo { margin-right: 6px; }
+.tm { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; }
+.wk .lbl { display: flex; align-items: center; gap: 6px; }
 .wk .tot { font-family: var(--font-display); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
 .wk .tot { grid-column: 3; grid-row: 1; }
 .wk ul { grid-column: 2; grid-row: 1; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; min-width: 0; }
@@ -117,7 +118,7 @@ th .logo { margin-right: 6px; }
 footer { color: var(--muted); font-size: 12px; }
 @media (max-width: 520px) {
   tbody th { padding: 0 6px; font-size: 15px; }
-  th .logo { width: 18px; height: 18px; margin-right: 4px; }
+  th .logo { width: 18px; height: 18px; }
   td.cell { min-width: 46px; padding: 6px 2px; }
   td.cell .v { font-size: 15px; }
 }
@@ -377,7 +378,7 @@ footer { color: var(--muted); font-size: 12px; }
       `</tr></thead><tbody>`;
     if (!list.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname, like DAL, Dallas or Cowboys.</td></tr>`;
     for (const t of list) {
-      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}">${logo(t.team)}${t.team}</th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}"><span class="tm">${t.team}${logo(t.team)}</span></th>` + POS.map(p => {
         const c = t.pos[p];
         const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
         return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
@@ -405,7 +406,7 @@ footer { color: var(--muted); font-size: 12px; }
       const adj = state.adj && w.exp != null;
       const base = adj ? w.exp : model.offense[team + "|" + p].total / model.offense[team + "|" + p].games;
       const d = w.pts - base;
-      return `<span class="opp" title="${TEAMS[team] || ""}">${logo(team)}${team} <span class="d ${diffCls(d)}">${signed(d)}</span></span>
+      return `<span class="opp" title="${TEAMS[team] || ""}">${team} <span class="d ${diffCls(d)}">${signed(d)}</span></span>
         <span class="note">${fmt(base)} ${adj ? "expected" : "avg"}</span>`;
     };
     el.innerHTML = `
@@ -421,7 +422,7 @@ footer { color: var(--muted); font-size: 12px; }
         ? `Schedule-adjusted: next to each opponent is how far the game beat or missed what that offense's ${p}s were expected to score, based on their other ${state.season} games and the defenses they faced. Player numbers compare with each player's own per-game average.`
         : `Green and red numbers compare each game with that offense's or player's own per-game average for ${state.season}, weeks ${state.from}–${state.to}.`}</p>
       <div class="weeks">${weeks.map(w => `
-        <div class="wk"><div class="side"><span class="lbl">Week ${w.wk}</span>
+        <div class="wk"><div class="side"><span class="lbl">Week ${w.wk} ${w.players[0] ? logo(w.players[0][1]) : ""}</span>
           ${oppLine(w)}</div>
           <span class="tot">${fmt(w.pts)}</span>
           <ul>${w.players.map(([n, , pts, id]) => {
@@ -465,7 +466,7 @@ footer { color: var(--muted); font-size: 12px; }
     if (!order.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname.</td></tr>`;
     for (const team of order) {
       const o = m.opp[team], d = m.byTeam[o.team];
-      html += `<tr><th scope="row" title="${TEAMS[team] || ""}">${logo(team)}${team}<span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[team] || ""}"><span class="tm">${team}${logo(team)}</span><span class="opp-of">${o.at} ${o.team}</span></th>` + POS.map(p => {
         const c = d && d.pos[p];
         if (!c) return `<td class="cell">—</td>`;
         const diff = c.value - m.leagueAvg[p];
