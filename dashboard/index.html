@@ -336,7 +336,7 @@ footer { color: var(--muted); font-size: 12px; }
         const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
         return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
           aria-label="${t.team} allowed ${fmt(c.value)} to ${p}, ${signed(c.value - model.leagueAvg[p])} vs league average, rank ${c.rank}"
-          style="background:${cellColor(c.value, model.leagueAvg[p])}"><span class="v">${fmt(c.value)}</span><span class="r">${signed(c.value - model.leagueAvg[p])}</span></td>`;
+          style="background:${cellColor(c.value, model.leagueAvg[p])}"><span class="v">${signed(c.value - model.leagueAvg[p])}</span><span class="r">${fmt(c.value)}</span></td>`;
       }).join("") + `</tr>`;
     }
     $("board").innerHTML = html + "</tbody>";
@@ -468,7 +468,7 @@ footer { color: var(--muted); font-size: 12px; }
     for (const v of ["board", "week", "team"]) $("view-" + v).hidden = v !== state.view;
     const m = state.view === "board" ? null : matchupModel();
     $("legend-note").textContent = state.view === "board"
-      ? `Small number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position`
+      ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}.`
       : m ? `Week ${DATA.upcoming.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank.` : "";
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
     if (state.view === "week") renderWeek();
