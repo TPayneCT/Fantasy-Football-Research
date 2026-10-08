@@ -67,6 +67,14 @@ button:focus-visible, select:focus-visible, input:focus-visible, td.cell:focus-v
 .pl .rate b { display: block; font-family: var(--font-display); font-size: 22px; line-height: 1; }
 .pl .rate small { color: var(--muted); font-size: 12px; }
 .pl.tap { cursor: pointer; }
+.combo { position: relative; flex: 1 1 15em; min-width: 0; }
+.combo > label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.combo input { width: 100%; }
+.suggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; max-height: 55vh; overflow-y: auto; box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 18%, transparent); }
+.suggest button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; font: inherit; color: var(--fg); background: none; border: 0; border-radius: 6px; padding: 9px 10px; cursor: pointer; }
+.suggest button:hover, .suggest button:focus-visible { background: var(--surface-2); }
+.suggest small { color: var(--muted); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest .none { padding: 9px 10px; color: var(--muted); font-size: 14px; }
 .go { font: inherit; font-weight: 700; color: var(--surface); background: var(--accent); border: 0; border-radius: 6px; padding: 6px 14px; min-height: 36px; cursor: pointer; }
 #who-status { flex-basis: 100%; }
 #who-status:empty { display: none; }
@@ -191,8 +199,11 @@ footer { color: var(--muted); font-size: 12px; }
 
   <div id="view-team" class="view" hidden>
     <form class="controls" id="who-form" aria-label="Choose a Sleeper team">
-      <label class="field"><span>Sleeper username</span><input type="search" id="who" list="members" autocomplete="off" placeholder="Pick or type a username"></label>
-      <datalist id="members"></datalist>
+      <div class="field combo"><label for="who">Sleeper username</label>
+        <input type="search" id="who" name="sleeper-user" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          placeholder="Pick a league member or type any username" role="combobox" aria-controls="who-list" aria-expanded="false">
+        <ul id="who-list" class="suggest" role="listbox" hidden></ul>
+      </div>
       <label class="field" id="league-field" hidden><span>League</span><select id="league"></select></label>
       <button type="submit" class="go">Load team</button>
       <p class="hint" id="who-status" aria-live="polite"></p>
@@ -676,11 +687,26 @@ footer { color: var(--muted); font-size: 12px; }
     }
   }
 
-  $("members").innerHTML = DATA.league.members.map(([u, team]) => `<option value="${esc(u)}">${esc(team || u)}</option>`).join("");
-  $("who").value = state.who || (DATA.league.members.find(([, team]) => DATA.roster && team === DATA.roster.team_name) || [""])[0];
-  $("who-form").addEventListener("submit", e => { e.preventDefault(); loadUser($("who").value); });
-  $("who").addEventListener("change", () => loadUser($("who").value));
-  $("league").addEventListener("change", () => loadUser($("who").value, $("league").value));
+  // Suggestion dropdown: every league member, filtered by username or team name as you type.
+  function showSuggestions() {
+    const q = $("who").value.trim().toLowerCase();
+    const hits = DATA.league.members.filter(([u, team]) => !q || u.toLowerCase().includes(q) || team.toLowerCase().includes(q));
+    $("who-list").innerHTML = hits.length
+      ? hits.map(([u, team]) => `<li role="option"><button type="button" data-user="${esc(u)}"><span>${esc(u)}</span><small>${esc(team)}</small></button></li>`).join("")
+      : `<li class="none">Not in ${esc(DATA.league.name)}. Tap Load team to look up "${esc($("who").value.trim())}".</li>`;
+    $("who-list").hidden = false;
+    $("who").setAttribute("aria-expanded", "true");
+  }
+  function hideSuggestions() { $("who-list").hidden = true; $("who").setAttribute("aria-expanded", "false"); }
+  function pick(name) { hideSuggestions(); $("who").value = ""; $("who").blur(); loadUser(name); }
+  $("who").addEventListener("focus", showSuggestions);
+  $("who").addEventListener("input", showSuggestions);
+  $("who").addEventListener("keydown", e => { if (e.key === "Escape") hideSuggestions(); });
+  $("who-list").addEventListener("pointerdown", e => e.preventDefault());   // keep focus so the tap registers
+  $("who-list").addEventListener("click", e => { const b = e.target.closest("[data-user]"); if (b) pick(b.dataset.user); });
+  document.addEventListener("click", e => { if (!e.target.closest(".combo")) hideSuggestions(); });
+  $("who-form").addEventListener("submit", e => { e.preventDefault(); const v = $("who").value.trim(); if (v) pick(v); });
+  $("league").addEventListener("change", () => loadUser(state.who, $("league").value));
   if (state.who) loadUser(state.who);
 
   resetWeeks();
