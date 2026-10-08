@@ -103,7 +103,9 @@ tbody tr:hover th { color: var(--accent); }
 .wk .opp { font-weight: 700; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .logo { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 50%; font: 700 7.5px/1 var(--font-body); letter-spacing: 0; overflow: hidden; vertical-align: middle; }
 .logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.tm { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; }
+.tm { display: inline-flex; align-items: center; gap: 5px; }
+tbody th, thead th:first-child { position: sticky; left: 0; z-index: 2; background: var(--surface); }
+th.all, td.cell[data-pos="ALL"] { border-left: 2px solid var(--fg); }
 .wk .lbl { display: flex; align-items: center; gap: 6px; }
 .wk .tot { font-family: var(--font-display); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
 .wk .tot { grid-column: 3; grid-row: 1; }
@@ -117,10 +119,14 @@ tbody tr:hover th { color: var(--accent); }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 footer { color: var(--muted); font-size: 12px; }
 @media (max-width: 520px) {
-  tbody th { padding: 0 6px; font-size: 15px; }
-  th .logo { width: 18px; height: 18px; }
-  td.cell { min-width: 46px; padding: 6px 2px; }
-  td.cell .v { font-size: 15px; }
+  tbody th { padding: 0 4px; font-size: 14px; }
+  .tm { gap: 3px; }
+  th .logo { width: 16px; height: 16px; }
+  td.cell { min-width: 41px; padding: 6px 1px; }
+  td.cell .v { font-size: 14px; }
+  td.cell .r { font-size: 10px; }
+  thead button { font-size: 14px; padding-inline: 1px; }
+  thead .avg { font-size: 9.5px; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
@@ -191,6 +197,8 @@ footer { color: var(--muted); font-size: 12px; }
 <script>
 (() => {
   const POS = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const OFF = ["QB", "RB", "WR", "TE", "K"];    // the ALL column: points allowed to offense, DEF left out
+  const COLS = [...POS, "ALL"];
   const TEAMS = {
     ARI: "Arizona Cardinals", ATL: "Atlanta Falcons", BAL: "Baltimore Ravens", BUF: "Buffalo Bills",
     CAR: "Carolina Panthers", CHI: "Chicago Bears", CIN: "Cincinnati Bengals", CLE: "Cleveland Browns",
@@ -330,13 +338,18 @@ footer { color: var(--muted); font-size: 12px; }
       leagueAvg[p] = list.reduce((s, t) => s + t.pos[p].value, 0) / list.length;
       [...list].sort((a, b) => b.pos[p].value - a.pos[p].value).forEach((t, i) => { t.pos[p].rank = i + 1; });
     }
+    for (const t of list) {
+      t.pos.ALL = { value: OFF.reduce((s, p) => s + t.pos[p].value, 0), total: OFF.reduce((s, p) => s + t.pos[p].total, 0), weeks: [] };
+    }
+    leagueAvg.ALL = OFF.reduce((s, p) => s + leagueAvg[p], 0);
+    [...list].sort((a, b) => b.pos.ALL.value - a.pos.ALL.value).forEach((t, i) => { t.pos.ALL.rank = i + 1; });
     const byTeam = Object.fromEntries(list.map(t => [t.team, t]));
     return { list, byTeam, leagueAvg, n: list.length, offense, player, season, from, to };
   }
 
-  function cellColor(v, avg) {
+  function cellColor(v, avg, spread = 0.4) {
     if (!avg) return "transparent";
-    const d = Math.max(-1, Math.min(1, (v - avg) / avg / 0.4));
+    const d = Math.max(-1, Math.min(1, (v - avg) / avg / spread));
     const pct = Math.round(Math.abs(d) * 55);
     return `color-mix(in srgb, var(${d >= 0 ? "--good" : "--bad"}) ${pct}%, var(--surface))`;
   }
@@ -374,16 +387,16 @@ footer { color: var(--muted); font-size: 12px; }
       : state.dir * (b.pos[state.sort].value - a.pos[state.sort].value));
     const arrow = k => state.sort === k ? `<span class="arrow">${state.dir === 1 ? "▼" : "▲"}</span>` : "";
     let html = `<thead><tr><th scope="col"><button type="button" data-sort="team">TEAM${arrow("team")}</button></th>` +
-      POS.map(p => `<th scope="col"><button type="button" data-sort="${p}">${p}${arrow(p)}<span class="avg">avg ${fmt(model.leagueAvg[p])}</span></button></th>`).join("") +
+      COLS.map(p => `<th scope="col" class="${p === "ALL" ? "all" : ""}"><button type="button" data-sort="${p}">${p}${arrow(p)}<span class="avg">avg ${fmt(model.leagueAvg[p])}</span></button></th>`).join("") +
       `</tr></thead><tbody>`;
-    if (!list.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try an abbreviation, city or nickname, like DAL, Dallas or Cowboys.</td></tr>`;
+    if (!list.length) html += `<tr><td colspan="8" class="empty">No team matches "${q}". Try an abbreviation, city or nickname, like DAL, Dallas or Cowboys.</td></tr>`;
     for (const t of list) {
-      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}"><span class="tm">${t.team}${logo(t.team)}</span></th>` + POS.map(p => {
+      html += `<tr><th scope="row" title="${TEAMS[t.team] || ""}"><span class="tm">${t.team}${logo(t.team)}</span></th>` + COLS.map(p => {
         const c = t.pos[p];
         const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
         return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
           aria-label="${t.team} allowed ${fmt(c.value)} to ${p}, ${signed(c.value - model.leagueAvg[p])} vs league average, rank ${c.rank}"
-          style="background:${cellColor(c.value, model.leagueAvg[p])}"><span class="v">${signed(c.value - model.leagueAvg[p])}</span><span class="r">${fmt(c.value)}</span></td>`;
+          style="background:${cellColor(c.value, model.leagueAvg[p], p === "ALL" ? 0.12 : 0.4)}"><span class="v">${signed(c.value - model.leagueAvg[p])}</span><span class="r">${fmt(c.value)}</span></td>`;
       }).join("") + `</tr>`;
     }
     $("board").innerHTML = html + "</tbody>";
@@ -399,19 +412,37 @@ footer { color: var(--muted); font-size: 12px; }
     const p = state.sel.pos, c = t.pos[p];
     const [cls, label] = tier(c.rank, model.n);
     const diff = c.value - model.leagueAvg[p];
-    const weeks = [...c.weeks].sort((a, b) => b.wk - a.wk);
+    // Expected (adjusted) or the offense's average (raw) for one position-week.
+    const baseOf = (w, pos) => {
+      const team = w.players[0] && w.players[0][1], o = team && model.offense[team + "|" + pos];
+      if (state.adj && w.exp != null) return w.exp;
+      return o ? o.total / o.games : w.pts;
+    };
+    let weeks;
+    if (p === "ALL") {
+      const byWk = {};
+      for (const pos of OFF) for (const w of t.pos[pos].weeks) {
+        const a = byWk[w.wk] ||= { wk: w.wk, pts: 0, base: 0, players: [], parts: [] };
+        a.pts += w.pts; a.base += baseOf(w, pos);
+        if (!a.players.length) a.players = w.players;
+        a.parts.push({ pos, pts: w.pts, base: baseOf(w, pos) });
+      }
+      weeks = Object.values(byWk).sort((a, b) => b.wk - a.wk);
+    } else {
+      weeks = [...c.weeks].sort((a, b) => b.wk - a.wk);
+    }
     const oppLine = w => {
       const team = w.players[0] && w.players[0][1];
       if (!team) return `<span class="opp">—</span>`;
-      const adj = state.adj && w.exp != null;
-      const base = adj ? w.exp : model.offense[team + "|" + p].total / model.offense[team + "|" + p].games;
+      const adj = state.adj && (p === "ALL" || w.exp != null);
+      const base = p === "ALL" ? w.base : baseOf(w, p);
       const d = w.pts - base;
       return `<span class="opp" title="${TEAMS[team] || ""}">${team} <span class="d ${diffCls(d)}">${signed(d)}</span></span>
         <span class="note">${fmt(base)} ${adj ? "expected" : "avg"}</span>`;
     };
     el.innerHTML = `
       <div><div class="eyebrow">${state.season} · weeks ${state.from}–${state.to}</div>
-      <h2>${t.team} vs ${p} <span class="pill ${cls}">${label}</span></h2></div>
+      <h2>${t.team} vs ${p === "ALL" ? "all offense" : p} <span class="pill ${cls}">${label}</span></h2></div>
       <div class="stats">
         <div class="stat"><b>${fmt(c.value)}</b><span>${state.adj ? "Adjusted " : ""}${state.mode === "avg" ? "per game" : "total"}</span></div>
         <div class="stat"><b>#${c.rank}</b><span>of ${model.n}</span></div>
@@ -425,7 +456,7 @@ footer { color: var(--muted); font-size: 12px; }
         <div class="wk"><div class="side"><span class="lbl">Week ${w.wk} ${w.players[0] ? logo(w.players[0][1]) : ""}</span>
           ${oppLine(w)}</div>
           <span class="tot">${fmt(w.pts)}</span>
-          <ul>${w.players.map(([n, , pts, id]) => {
+          <ul>${p === "ALL" ? w.parts.map(x => `<li>${x.pos} <b>${fmt(x.pts)}</b> <span class="d ${diffCls(x.pts - x.base)}">${signed(x.pts - x.base)}</span></li>`).join("") : w.players.map(([n, , pts, id]) => {
             const pl = model.player[id], d = pts - pl.total / pl.games;
             return `<li class="${pts ? "" : "zero"}">${n} <b>${fmt(pts)}</b> <span class="d ${diffCls(d)}" title="vs per-game avg ${fmt(pl.total / pl.games)} avg">${signed(d)}</span></li>`;
           }).join("")}</ul>
@@ -516,7 +547,7 @@ footer { color: var(--muted); font-size: 12px; }
     for (const v of ["board", "week", "team"]) $("view-" + v).hidden = v !== state.view;
     const m = state.view === "board" ? null : matchupModel();
     $("legend-note").textContent = state.view === "board"
-      ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}.`
+      ? `Big number = ${state.adj ? "schedule-adjusted " : ""}points above or below the league average for that position. Small number = ${state.adj ? "adjusted " : ""}points allowed ${state.mode === "avg" ? "per game" : "in total"}. ALL = QB + RB + WR + TE + K (DEF left out).`
       : m ? `Week ${m.week}: each cell is the opponent's points allowed vs league average, per game (${rangeText(m)}). Small number = opponent's rank.` : "";
     if (state.view === "board") { renderBoard(model); renderDetail(model); }
     if (state.view === "week") renderWeek();
