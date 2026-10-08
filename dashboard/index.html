@@ -657,7 +657,7 @@ footer { color: var(--muted); font-size: 12px; }
         <span class="pos">${pl.pos}</span>
         <span class="who"><b>${esc(pl.name)}</b><small>${pl.team} ${o.at} ${o.team} · ${ownTxt}</small></span>
         <span class="rate"><span class="pill ${cls}">${label}</span>
-          <b class="d ${diffCls(diff)}">${signed(diff)}</b><small>${o.team} allows ${fmt(c.value)} · #${c.rank}</small></span></div>`;
+          <b class="d ${diffCls(diff)}">${signed(diff)}</b><small>${o.team} allows ${fmt(c.value)} · #${c.rank} vs ${pl.pos}</small></span></div>`;
     };
     const starters = r.players.filter(p => p.starter), bench = r.players.filter(p => !p.starter);
     el.innerHTML = `<div><div class="eyebrow">Week ${m ? m.week : "—"} matchups${r.league_name ? " · " + esc(r.league_name) : ""}</div><h2>${esc(r.team_name)}</h2></div>
