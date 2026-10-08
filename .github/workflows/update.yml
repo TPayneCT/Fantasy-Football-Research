@@ -2,8 +2,7 @@ name: Update fantasy data
 
 on:
   schedule:
-    - cron: "0 12 * * 2"   # Tuesday 12:00 UTC, after Monday Night Football
-    - cron: "0 12 * * 4"   # Thursday 12:00 UTC, before Thursday Night Football (roster moves, stat corrections)
+    - cron: "0 12 * * *"   # Daily 12:00 UTC (5am Arizona): finished games, stat corrections and roster moves
   workflow_dispatch:
 
 permissions:

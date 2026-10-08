@@ -72,6 +72,11 @@ def main():
         "roster": roster(config),
     }
     out = ROOT / "dashboard" / "data.js"
+    # Keep the old timestamp when nothing else changed, so a quiet day makes no commit.
+    if out.exists():
+        old = json.loads(out.read_text()[len("window.PA_DATA="):-2])
+        if {**old, "generated": None} == {**payload, "generated": None}:
+            payload["generated"] = old["generated"]
     out.write_text("window.PA_DATA=" + json.dumps(payload, separators=(",", ":")) + ";\n")
     print(f"{out.relative_to(ROOT)}: {out.stat().st_size / 1e6:.1f} MB, seasons {list(payload['seasons'])}, "
           f"upcoming week {payload['upcoming'] and payload['upcoming']['week']}, "

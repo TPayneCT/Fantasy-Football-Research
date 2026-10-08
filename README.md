@@ -17,4 +17,4 @@ Research tools for The Undrafted Benchwarmers (Sleeper league `13893292719729541
 
 Settings live in `config.json`. Python 3.10+ with no extra packages.
 
-The GitHub Action in `.github/workflows/update.yml` runs every Tuesday and Thursday (and on demand) and commits refreshed data.
+The GitHub Action in `.github/workflows/update.yml` runs daily (and on demand) and commits refreshed data when anything changed.
