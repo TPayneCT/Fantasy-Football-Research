@@ -1,6 +1,6 @@
 """Pack data/points_allowed/*.json into dashboard/data.js for the static dashboard.
 
-Format: window.PA_DATA = {generated, seasons: {season: [[week, defense, position, points, [[name, team, pts], ...]], ...]}}
+Format: window.PA_DATA = {generated, seasons: {season: [[week, defense, position, points, [[name, team, pts, player_id], ...]], ...]}}
 """
 import json
 from datetime import datetime, timezone
@@ -12,7 +12,7 @@ seasons = {}
 for f in sorted((ROOT / "data" / "points_allowed").glob("*.json")):
     seasons[f.stem] = [
         [r["week"], r["defense"], r["position"], r["points"],
-         [[p["name"], p["team"], p["pts"]] for p in r["players"]]]
+         [[p["name"], p["team"], p["pts"], p["id"]] for p in r["players"]]]
         for r in json.loads(f.read_text())
     ]
 

@@ -85,6 +85,10 @@ tbody tr:hover th { color: var(--accent); }
 .wk ul { grid-column: 2 / 4; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; min-width: 0; }
 .wk li b { font-variant-numeric: tabular-nums; }
 .wk li.zero { color: var(--muted); }
+.d { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.d.up { color: var(--good); }
+.d.down { color: var(--bad); }
+.wk .note { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 footer { color: var(--muted); font-size: 12px; }
 @media (max-width: 520px) {
@@ -124,7 +128,7 @@ footer { color: var(--muted); font-size: 12px; }
 
   <div class="legend">
     <span class="ramp">Tough <i></i> Easy</span>
-    <span>Small number under each value = rank (1 = most points allowed)</span>
+    <span>Small number = points above or below the league average for that position</span>
   </div>
 
   <div class="board"><table id="board" aria-label="Points allowed by defense and position"></table></div>
@@ -141,6 +145,8 @@ footer { color: var(--muted); font-size: 12px; }
   const DATA = window.PA_DATA;
   const $ = id => document.getElementById(id);
   const fmt = n => (Math.round(n * 10) / 10).toFixed(1);
+  const signed = n => (n >= 0 ? "+" : "−") + fmt(Math.abs(n));
+  const diffCls = n => n >= 0.05 ? "up" : n <= -0.05 ? "down" : "";
   const store = {
     get() { try { return JSON.parse(localStorage.getItem("pa-board") || "{}"); } catch { return {}; } },
     set(v) { try { localStorage.setItem("pa-board", JSON.stringify(v)); } catch {} }
@@ -172,6 +178,17 @@ footer { color: var(--muted); font-size: 12px; }
       c.total += pts;
       c.weeks.push({ wk, pts, players });
     }
+    // Offense side: what each team's players at a position usually score, and each player's per-game average.
+    const offense = {}, player = {};
+    for (const [wk, , pos, pts, players] of rows) {
+      if (!players.length) continue;
+      const o = offense[players[0][1] + "|" + pos] ||= { total: 0, games: 0 };
+      o.total += pts; o.games += 1;
+      for (const [, , p, id] of players) {
+        const pl = player[id] ||= { total: 0, games: 0 };
+        pl.total += p; pl.games += 1;
+      }
+    }
     const list = Object.values(teams);
     const leagueAvg = {};
     for (const p of POS) {
@@ -182,7 +199,7 @@ footer { color: var(--muted); font-size: 12px; }
       leagueAvg[p] = list.reduce((s, t) => s + t.pos[p].value, 0) / list.length;
       [...list].sort((a, b) => b.pos[p].value - a.pos[p].value).forEach((t, i) => { t.pos[p].rank = i + 1; });
     }
-    return { list, leagueAvg, n: list.length };
+    return { list, leagueAvg, n: list.length, offense, player };
   }
 
   function cellColor(v, avg) {
@@ -229,8 +246,8 @@ footer { color: var(--muted); font-size: 12px; }
         const c = t.pos[p];
         const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
         return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
-          aria-label="${t.team} allowed ${fmt(c.value)} to ${p}, rank ${c.rank}"
-          style="background:${cellColor(c.value, model.leagueAvg[p])}"><span class="v">${fmt(c.value)}</span><span class="r">#${c.rank}</span></td>`;
+          aria-label="${t.team} allowed ${fmt(c.value)} to ${p}, ${signed(c.value - model.leagueAvg[p])} vs league average, rank ${c.rank}"
+          style="background:${cellColor(c.value, model.leagueAvg[p])}"><span class="v">${fmt(c.value)}</span><span class="r">${signed(c.value - model.leagueAvg[p])}</span></td>`;
       }).join("") + `</tr>`;
     }
     $("board").innerHTML = html + "</tbody>";
@@ -247,6 +264,13 @@ footer { color: var(--muted); font-size: 12px; }
     const [cls, label] = tier(c.rank, model.n);
     const diff = c.value - model.leagueAvg[p];
     const weeks = [...c.weeks].sort((a, b) => b.wk - a.wk);
+    const oppLine = w => {
+      const team = w.players[0] && w.players[0][1];
+      if (!team) return `<span class="opp">—</span>`;
+      const o = model.offense[team + "|" + p], avg = o.total / o.games, d = w.pts - avg;
+      return `<span class="opp">vs ${team} <span class="d ${diffCls(d)}">${signed(d)}</span>
+        <span class="note">vs ${team}'s ${fmt(avg)} avg</span></span>`;
+    };
     el.innerHTML = `
       <div><div class="eyebrow">${state.season} · weeks ${state.from}–${state.to}</div>
       <h2>${t.team} vs ${p} <span class="pill ${cls}">${label}</span></h2></div>
@@ -256,11 +280,15 @@ footer { color: var(--muted); font-size: 12px; }
         <div class="stat"><b>${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))}</b><span>vs league avg</span></div>
         <div class="stat"><b>${t.games.size}</b><span>Games</span></div>
       </div>
+      <p class="hint">Green and red numbers compare each game with that offense's or player's own per-game average for ${state.season}, weeks ${state.from}–${state.to}.</p>
       <div class="weeks">${weeks.map(w => `
         <div class="wk"><span class="lbl">Week ${w.wk}</span>
-          <span class="opp">vs ${w.players[0] ? w.players[0][1] : "—"}</span>
+          ${oppLine(w)}
           <span class="tot">${fmt(w.pts)}</span>
-          <ul>${w.players.map(([n, , pts]) => `<li class="${pts ? "" : "zero"}">${n} <b>${fmt(pts)}</b></li>`).join("")}</ul>
+          <ul>${w.players.map(([n, , pts, id]) => {
+            const pl = model.player[id], d = pts - pl.total / pl.games;
+            return `<li class="${pts ? "" : "zero"}">${n} <b>${fmt(pts)}</b> <span class="d ${diffCls(d)}" title="vs per-game avg ${fmt(pl.total / pl.games)} avg">${signed(d)}</span></li>`;
+          }).join("")}</ul>
         </div>`).join("")}</div>`;
   }
 
