@@ -1,0 +1,312 @@
+<title>Points Allowed Board</title>
+<meta name="description" content="Fantasy points allowed by each NFL defense to each position, scored with The Undrafted Benchwarmers league settings.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Layout: one column. Header + controls, then the team x position board, then the drilldown for the tapped cell. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --surface-2: #e8ece7;
+  --line: #d3d9d2;
+  --fg: #18201a;
+  --muted: #5d685f;
+  --accent: #23508f;
+  --good: #1f8a4c;
+  --bad: #c2412d;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121714; --surface: #1a211c; --surface-2: #232c25; --line: #313b33;
+    --fg: #e6ebe5; --muted: #98a59a; --accent: #7fa8e8; --good: #3fbf72; --bad: #ef6a52;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121714; --surface: #1a211c; --surface-2: #232c25; --line: #313b33;
+  --fg: #e6ebe5; --muted: #98a59a; --accent: #7fa8e8; --good: #3fbf72; --bad: #ef6a52;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 18px; }
+header { display: grid; gap: 4px; }
+.eyebrow { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-size: 14px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(30px, 6vw, 42px); line-height: 1; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0; max-width: 62ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.field { display: grid; gap: 3px; }
+.field > span { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+select, input[type="search"] { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-height: 36px; }
+input[type="search"] { width: 9.5em; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 14px; background: var(--bg); color: var(--fg); border: 0; padding: 6px 10px; min-height: 36px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); font-weight: 700; }
+button:focus-visible, select:focus-visible, input:focus-visible, td.cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; color: var(--muted); }
+.ramp { display: inline-flex; align-items: center; gap: 6px; }
+.ramp i { display: inline-block; width: 88px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--bad), var(--surface-2), var(--good)); }
+
+.board { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 0; text-align: center; }
+thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; border-bottom: 1px solid var(--line); }
+thead button { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .04em; color: var(--fg); background: none; border: 0; padding: 10px 4px 8px; width: 100%; cursor: pointer; }
+thead button .arrow { color: var(--accent); font-size: 12px; margin-left: 2px; }
+thead .avg { display: block; font-family: var(--font-body); font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+tbody th { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 17px; padding: 0 10px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+td.cell { cursor: pointer; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); padding: 7px 4px; min-width: 56px; }
+td.cell .v { display: block; font-weight: 700; font-size: 16px; }
+td.cell .r { display: block; font-size: 11px; color: var(--muted); }
+td.cell[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+tbody tr:hover th { color: var(--accent); }
+.empty { padding: 24px; color: var(--muted); text-align: center; }
+
+.detail { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; scroll-margin-top: 12px; }
+.detail h2 { font-family: var(--font-display); font-size: 26px; margin: 0; line-height: 1.1; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.stat b { display: block; font-family: var(--font-display); font-size: 24px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
+.pill.good { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.pill.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.pill.mid { background: var(--surface-2); color: var(--muted); }
+.weeks { display: grid; gap: 8px; }
+.wk { display: grid; grid-template-columns: 4.2em 1fr auto; gap: 4px 10px; align-items: baseline; border-top: 1px solid var(--line); padding-top: 8px; }
+.wk .lbl { font-family: var(--font-display); font-weight: 600; color: var(--muted); }
+.wk .opp { font-weight: 600; }
+.wk .tot { font-family: var(--font-display); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
+.wk ul { grid-column: 2 / 4; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; min-width: 0; }
+.wk li b { font-variant-numeric: tabular-nums; }
+.wk li.zero { color: var(--muted); }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+footer { color: var(--muted); font-size: 12px; }
+@media (max-width: 520px) {
+  tbody th { padding: 0 6px; font-size: 15px; }
+  td.cell { min-width: 46px; padding: 6px 2px; }
+  td.cell .v { font-size: 15px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">The Undrafted Benchwarmers scoring</div>
+    <h1>Points Allowed Board</h1>
+    <p class="sub">Fantasy points each NFL defense gave up to each position. Higher numbers and green cells mean an easier matchup. Tap any number to see the week-by-week players behind it.</p>
+  </header>
+
+  <section class="controls" aria-label="Filters">
+    <label class="field"><span>Season</span><select id="season"></select></label>
+    <label class="field"><span>From week</span><select id="from"></select></label>
+    <label class="field"><span>To week</span><select id="to"></select></label>
+    <div class="field"><span>Quick range</span>
+      <div class="seg" id="quick">
+        <button type="button" data-n="3">Last 3</button>
+        <button type="button" data-n="5">Last 5</button>
+        <button type="button" data-n="0">All</button>
+      </div>
+    </div>
+    <div class="field"><span>Show</span>
+      <div class="seg" id="mode">
+        <button type="button" data-mode="avg">Per game</button>
+        <button type="button" data-mode="total">Total</button>
+      </div>
+    </div>
+    <label class="field"><span>Team</span><input type="search" id="search" placeholder="e.g. DAL" autocomplete="off"></label>
+  </section>
+
+  <div class="legend">
+    <span class="ramp">Tough <i></i> Easy</span>
+    <span>Small number under each value = rank (1 = most points allowed)</span>
+  </div>
+
+  <div class="board"><table id="board" aria-label="Points allowed by defense and position"></table></div>
+
+  <section class="detail" id="detail" aria-live="polite"></section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+(() => {
+  const POS = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const DATA = window.PA_DATA;
+  const $ = id => document.getElementById(id);
+  const fmt = n => (Math.round(n * 10) / 10).toFixed(1);
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem("pa-board") || "{}"); } catch { return {}; } },
+    set(v) { try { localStorage.setItem("pa-board", JSON.stringify(v)); } catch {} }
+  };
+
+  const seasons = Object.keys(DATA.seasons).sort().reverse();
+  const saved = store.get();
+  const state = {
+    season: seasons.includes(saved.season) ? saved.season : seasons[0],
+    from: 1, to: 1, mode: saved.mode === "total" ? "total" : "avg",
+    search: "", sort: saved.sort || "team", dir: saved.dir || 1, sel: null
+  };
+
+  function weeksOf(season) {
+    return [...new Set(DATA.seasons[season].map(r => r[0]))].sort((a, b) => a - b);
+  }
+  function resetWeeks() {
+    const w = weeksOf(state.season);
+    state.from = w[0]; state.to = w[w.length - 1];
+  }
+
+  function compute() {
+    const rows = DATA.seasons[state.season].filter(r => r[0] >= state.from && r[0] <= state.to);
+    const teams = {};
+    for (const [wk, def, pos, pts, players] of rows) {
+      const t = teams[def] ||= { team: def, games: new Set(), pos: {} };
+      t.games.add(wk);
+      const c = t.pos[pos] ||= { total: 0, weeks: [] };
+      c.total += pts;
+      c.weeks.push({ wk, pts, players });
+    }
+    const list = Object.values(teams);
+    const leagueAvg = {};
+    for (const p of POS) {
+      for (const t of list) {
+        const c = t.pos[p] ||= { total: 0, weeks: [] };
+        c.value = state.mode === "avg" ? c.total / t.games.size : c.total;
+      }
+      leagueAvg[p] = list.reduce((s, t) => s + t.pos[p].value, 0) / list.length;
+      [...list].sort((a, b) => b.pos[p].value - a.pos[p].value).forEach((t, i) => { t.pos[p].rank = i + 1; });
+    }
+    return { list, leagueAvg, n: list.length };
+  }
+
+  function cellColor(v, avg) {
+    if (!avg) return "transparent";
+    const d = Math.max(-1, Math.min(1, (v - avg) / avg / 0.4));
+    const pct = Math.round(Math.abs(d) * 55);
+    return `color-mix(in srgb, var(${d >= 0 ? "--good" : "--bad"}) ${pct}%, var(--surface))`;
+  }
+  function tier(rank, n) {
+    if (rank <= Math.round(n / 4)) return ["good", "Easy matchup"];
+    if (rank > n - Math.round(n / 4)) return ["bad", "Tough matchup"];
+    return ["mid", "Neutral"];
+  }
+
+  function renderControls() {
+    $("season").innerHTML = seasons.map(s => `<option ${s === state.season ? "selected" : ""}>${s}</option>`).join("");
+    const w = weeksOf(state.season);
+    const opts = sel => w.map(x => `<option value="${x}" ${x === sel ? "selected" : ""}>Week ${x}</option>`).join("");
+    $("from").innerHTML = opts(state.from);
+    $("to").innerHTML = opts(state.to);
+    const span = w.filter(x => x >= state.from && x <= state.to).length;
+    const last = w[w.length - 1];
+    document.querySelectorAll("#quick button").forEach(b => {
+      const n = +b.dataset.n;
+      const on = state.to === last && (n === 0 ? state.from === w[0] : span === n);
+      b.setAttribute("aria-pressed", on);
+    });
+    document.querySelectorAll("#mode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
+  }
+
+  function renderBoard(model) {
+    const q = state.search.trim().toUpperCase();
+    let list = model.list.filter(t => !q || t.team.includes(q));
+    list.sort((a, b) => state.sort === "team"
+      ? state.dir * a.team.localeCompare(b.team)
+      : state.dir * (b.pos[state.sort].value - a.pos[state.sort].value));
+    const arrow = k => state.sort === k ? `<span class="arrow">${state.dir === 1 ? "▼" : "▲"}</span>` : "";
+    let html = `<thead><tr><th scope="col"><button type="button" data-sort="team">TEAM${arrow("team")}</button></th>` +
+      POS.map(p => `<th scope="col"><button type="button" data-sort="${p}">${p}${arrow(p)}<span class="avg">avg ${fmt(model.leagueAvg[p])}</span></button></th>`).join("") +
+      `</tr></thead><tbody>`;
+    if (!list.length) html += `<tr><td colspan="7" class="empty">No team matches "${q}". Try a team abbreviation like DAL or KC.</td></tr>`;
+    for (const t of list) {
+      html += `<tr><th scope="row">${t.team}</th>` + POS.map(p => {
+        const c = t.pos[p];
+        const sel = state.sel && state.sel.team === t.team && state.sel.pos === p;
+        return `<td class="cell" tabindex="0" role="button" aria-selected="${!!sel}" data-team="${t.team}" data-pos="${p}"
+          aria-label="${t.team} allowed ${fmt(c.value)} to ${p}, rank ${c.rank}"
+          style="background:${cellColor(c.value, model.leagueAvg[p])}"><span class="v">${fmt(c.value)}</span><span class="r">#${c.rank}</span></td>`;
+      }).join("") + `</tr>`;
+    }
+    $("board").innerHTML = html + "</tbody>";
+  }
+
+  function renderDetail(model) {
+    const el = $("detail");
+    const t = state.sel && model.list.find(x => x.team === state.sel.team);
+    if (!t) {
+      el.innerHTML = `<p class="hint">Tap a number in the board to see which players scored those points, week by week.</p>`;
+      return;
+    }
+    const p = state.sel.pos, c = t.pos[p];
+    const [cls, label] = tier(c.rank, model.n);
+    const diff = c.value - model.leagueAvg[p];
+    const weeks = [...c.weeks].sort((a, b) => b.wk - a.wk);
+    el.innerHTML = `
+      <div><div class="eyebrow">${state.season} · weeks ${state.from}–${state.to}</div>
+      <h2>${t.team} vs ${p} <span class="pill ${cls}">${label}</span></h2></div>
+      <div class="stats">
+        <div class="stat"><b>${fmt(c.value)}</b><span>${state.mode === "avg" ? "Per game" : "Total"}</span></div>
+        <div class="stat"><b>#${c.rank}</b><span>of ${model.n}</span></div>
+        <div class="stat"><b>${diff >= 0 ? "+" : "−"}${fmt(Math.abs(diff))}</b><span>vs league avg</span></div>
+        <div class="stat"><b>${t.games.size}</b><span>Games</span></div>
+      </div>
+      <div class="weeks">${weeks.map(w => `
+        <div class="wk"><span class="lbl">Week ${w.wk}</span>
+          <span class="opp">vs ${w.players[0] ? w.players[0][1] : "—"}</span>
+          <span class="tot">${fmt(w.pts)}</span>
+          <ul>${w.players.map(([n, , pts]) => `<li class="${pts ? "" : "zero"}">${n} <b>${fmt(pts)}</b></li>`).join("")}</ul>
+        </div>`).join("")}</div>`;
+  }
+
+  function render() {
+    const model = compute();
+    renderControls();
+    renderBoard(model);
+    renderDetail(model);
+    store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir });
+  }
+
+  $("season").addEventListener("change", e => { state.season = e.target.value; resetWeeks(); render(); });
+  $("from").addEventListener("change", e => { state.from = +e.target.value; if (state.to < state.from) state.to = state.from; render(); });
+  $("to").addEventListener("change", e => { state.to = +e.target.value; if (state.from > state.to) state.from = state.to; render(); });
+  $("quick").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const w = weeksOf(state.season), n = +b.dataset.n;
+    state.to = w[w.length - 1];
+    state.from = n ? w[Math.max(0, w.length - n)] : w[0];
+    render();
+  });
+  $("mode").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.mode = b.dataset.mode; render();
+  });
+  $("search").addEventListener("input", e => { state.search = e.target.value; renderBoard(compute()); });
+  $("board").addEventListener("click", e => {
+    const s = e.target.closest("[data-sort]");
+    if (s) {
+      const k = s.dataset.sort;
+      state.dir = state.sort === k ? -state.dir : 1;
+      state.sort = k; render(); return;
+    }
+    const c = e.target.closest("td.cell");
+    if (c) {
+      state.sel = { team: c.dataset.team, pos: c.dataset.pos };
+      render();
+      $("detail").scrollIntoView({ block: "start" });
+    }
+  });
+  $("board").addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("td.cell")) { e.preventDefault(); e.target.click(); }
+  });
+
+  resetWeeks();
+  $("foot").textContent = `Scored with your current league settings. Data updated ${DATA.generated.replace("T", " ")} UTC.`;
+  render();
+})();
+</script>
