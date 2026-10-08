@@ -17,7 +17,7 @@ weeks = [int(w) for w in sys.argv[1:]] or range(1, state["week"])
 
 checked = mismatched = 0
 for week in weeks:
-    stats = sleeper.weekly_stats(lg["season"], week)
+    stats = {r["player_id"]: r["stats"] for r in sleeper.weekly_stats(lg["season"], week)}
     for team in sleeper.matchups(config["league_id"], week):
         for pid, official in (team["players_points"] or {}).items():
             ours = score(stats.get(pid, {}), settings)
