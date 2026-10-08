@@ -13,6 +13,9 @@ from scoring import score
 
 ROOT = Path(__file__).resolve().parent.parent
 POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
+# Defense and special-teams touchdowns (returns, fumble recoveries, blocked kicks). Kept separately
+# so the dashboard can show DEF points with these unpredictable scores left out.
+TD_KEYS = ("def_td", "def_st_td", "st_td", "fum_rec_td")
 
 
 def completed_weeks(season, state):
@@ -27,7 +30,7 @@ def build(season, scoring_settings, state):
     for week in completed_weeks(season, state):
         # Re-fetch the latest week in case of stat corrections; earlier weeks come from cache.
         stats = sleeper.weekly_stats(season, week, refresh=str(season) == state["season"] and week >= state["week"] - 1)
-        allowed = defaultdict(lambda: {"points": 0.0, "players": []})
+        allowed = defaultdict(lambda: {"points": 0.0, "td_points": 0.0, "players": []})
         for r in stats:
             pos = (r.get("player") or {}).get("position")
             if pos not in POSITIONS or not r.get("opponent") or not r["stats"].get("gp"):
@@ -36,11 +39,14 @@ def build(season, scoring_settings, state):
             name = "{} {}".format(r["player"].get("first_name", ""), r["player"].get("last_name", "")).strip()
             cell = allowed[(r["opponent"], pos)]
             cell["points"] += pts
+            if pos == "DEF":
+                cell["td_points"] += score({k: r["stats"].get(k, 0) for k in TD_KEYS}, scoring_settings)
             cell["players"].append({"id": r["player_id"], "name": name, "team": r["team"], "pts": pts})
         for (defense, pos), cell in sorted(allowed.items()):
             players = sorted(cell["players"], key=lambda p: -p["pts"])
             rows.append({"season": int(season), "week": week, "defense": defense, "position": pos,
-                         "points": round(cell["points"], 2), "players": players})
+                         "points": round(cell["points"], 2), "players": players,
+                         **({"td_points": round(cell["td_points"], 2)} if pos == "DEF" else {})})
     return rows
 
 
