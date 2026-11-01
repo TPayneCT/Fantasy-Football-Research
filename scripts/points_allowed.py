@@ -16,6 +16,11 @@ POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
 # Defense and special-teams touchdowns (returns, fumble recoveries, blocked kicks). Kept separately
 # so the dashboard can show DEF points with these unpredictable scores left out.
 TD_KEYS = ("def_td", "def_st_td", "st_td", "fum_rec_td")
+# Offensive touchdown points per player (including long-TD bonuses), kept as [passing, rushing, receiving]
+# so the dashboard can leave out RB/WR/TE TDs, QB rushing TDs or QB passing TDs.
+OFF_TD_KEYS = (("pass_td", "pass_td_40p", "pass_td_50p"),
+               ("rush_td", "rush_td_40p", "rush_td_50p"),
+               ("rec_td", "rec_td_40p", "rec_td_50p"))
 
 
 def completed_weeks(season, state):
@@ -41,7 +46,12 @@ def build(season, scoring_settings, state):
             cell["points"] += pts
             if pos == "DEF":
                 cell["td_points"] += score({k: r["stats"].get(k, 0) for k in TD_KEYS}, scoring_settings)
-            cell["players"].append({"id": r["player_id"], "name": name, "team": r["team"], "pts": pts})
+            player = {"id": r["player_id"], "name": name, "team": r["team"], "pts": pts}
+            if pos in ("QB", "RB", "WR", "TE"):
+                td = [score({k: r["stats"].get(k, 0) for k in keys}, scoring_settings) for keys in OFF_TD_KEYS]
+                if any(td):
+                    player["td"] = td
+            cell["players"].append(player)
         for (defense, pos), cell in sorted(allowed.items()):
             players = sorted(cell["players"], key=lambda p: -p["pts"])
             rows.append({"season": int(season), "week": week, "defense": defense, "position": pos,
