@@ -37,6 +37,8 @@ jobs:
             cat dashboard/index.html
           } > _site/index.html
           cp dashboard/data.js _site/
+          # Version the data URL so browsers never reuse a stale cached data.js with a new page.
+          sed -i "s|src=\"data.js\"|src=\"data.js?v=${GITHUB_SHA}\"|" _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
