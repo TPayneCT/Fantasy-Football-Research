@@ -2,7 +2,7 @@
 
 window.PA_DATA = {
   generated,
-  seasons: {season: [[week, defense, position, points, [[name, team, pts, player_id], ...], (DEF only, if any) td_points], ...]},
+  seasons: {season: [[week, defense, position, points, [[name, team, pts, player_id, (if any) [pass_td_pts, rush_td_pts, rec_td_pts]], ...], (DEF only, if any) td_points], ...]},
   upcoming: {season, week (next to play), weeks: {week: [[away, home, date], ...]}} or null,
   roster: {team_name, players: [{id, name, pos, team, starter}]} or null,
   league: {id, name, members: [[username, team_name], ...]},
@@ -24,7 +24,7 @@ def seasons():
     for f in sorted((ROOT / "data" / "points_allowed").glob("*.json")):
         out[f.stem] = [
             [r["week"], r["defense"], r["position"], r["points"],
-             [[p["name"], p["team"], p["pts"], p["id"]] for p in r["players"]]]
+             [[p["name"], p["team"], p["pts"], p["id"]] + ([p["td"]] if p.get("td") else []) for p in r["players"]]]
             + ([r["td_points"]] if r.get("td_points") else [])
             for r in json.loads(f.read_text())
         ]
