@@ -7,7 +7,12 @@ window.PA_DATA = {
   roster: {team_name, players: [{id, name, pos, team, starter}]} or null,
   league: {id, name, members: [[username, team_name], ...]},
   players: {player_id: [name, pos, team]} for every fantasy-relevant NFL player,
+  stat_seasons: seasons that have a dashboard/stats/{season}.js file,
 }
+
+dashboard/stats/{season}.js (loaded by the page only when a box score or points breakdown is opened):
+window.PA_STATS[season] = {"week|player_id": [{stat_key: value}, [[category, points], ...]], ...}
+Written for any season whose points_allowed file has stat lines (2026 onward).
 """
 import json
 from datetime import datetime, timezone
@@ -29,6 +34,23 @@ def seasons():
             for r in json.loads(f.read_text())
         ]
     return out
+
+
+def write_stats():
+    """One stats file per season that has stat lines. Returns those seasons."""
+    out_dir = ROOT / "dashboard" / "stats"
+    done = []
+    for f in sorted((ROOT / "data" / "points_allowed").glob("*.json")):
+        lines = {f"{r['week']}|{p['id']}": [p.get("s", {}), p.get("b", [])]
+                 for r in json.loads(f.read_text()) for p in r["players"] if p.get("s") or p.get("b")}
+        if not lines:
+            continue
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{f.stem}.js").write_text(
+            f"(window.PA_STATS=window.PA_STATS||{{}})[{json.dumps(f.stem)}]="
+            + json.dumps(lines, separators=(",", ":")) + ";\n")
+        done.append(f.stem)
+    return done
 
 
 def upcoming(state):
@@ -94,6 +116,7 @@ def main():
         "roster": roster(config),
         "league": league_info(config),
         "players": player_index(),
+        "stat_seasons": write_stats(),
     }
     out = ROOT / "dashboard" / "data.js"
     # Keep the old timestamp when nothing else changed, so a quiet day makes no commit.

@@ -138,6 +138,36 @@ th.all, td.cell[data-pos="ALL"] { border-left: 2px solid var(--fg); }
 .back { justify-self: start; font: inherit; font-size: 14px; font-weight: 600; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 footer { color: var(--muted); font-size: 12px; }
+
+/* Box scores and points breakdowns inside a drilldown. */
+.detail-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px; }
+.detail-head .seg button { min-height: 32px; padding: 4px 10px; }
+.wk .boxes { grid-column: 1 / -1; display: grid; gap: 8px; min-width: 0; }
+.boxwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.box { border-collapse: collapse; width: 100%; table-layout: fixed; min-width: 520px; font-size: 13px; font-variant-numeric: tabular-nums; }
+table.box col.nm { width: 11em; }
+table.box th, table.box td { padding: 4px 7px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+table.box th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: normal; vertical-align: bottom; line-height: 1.2; }
+table.box tr.bdrow .bd { position: sticky; left: 7px; width: min(100%, calc(100vw - 72px)); margin: 0; }
+table.box th:first-child, table.box td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; }
+table.box td.z { color: var(--muted); opacity: .55; }
+table.box tr.bdrow td { text-align: left; white-space: normal; position: static; background: var(--surface-2); }
+.boxpos { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.boxpos b { font-variant-numeric: tabular-nums; }
+.ptsbtn { font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.ptsbtn[aria-expanded="true"] { color: var(--accent); }
+.wk li.open { flex-basis: 100%; }
+.bd { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
+table.box .chip { background: var(--surface); }
+.chip b { font-variant-numeric: tabular-nums; }
+.chip.neg b { color: var(--bad); }
+.sosw.tap { cursor: pointer; border-radius: 4px; }
+.sosw.tap:hover .opp, .sosw.tap:focus-visible .opp { color: var(--accent); }
+.sosw .chev { display: inline-block; width: 1em; color: var(--muted); transition: transform .15s; }
+.sosw[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.sosx { border-left: 3px solid var(--accent); padding: 4px 0 8px 10px; display: grid; gap: 8px; }
+.sosx .weeks { gap: 6px; }
 @media (max-width: 520px) {
   tbody th { padding: 0 4px; font-size: 14px; }
   .tm { gap: 3px; }
@@ -339,8 +369,10 @@ footer { color: var(--muted); font-size: 12px; }
     ssort: "team", sdir: 1, ssel: null,
     sosFrom: null, sosTo: null,
     roster: DATA.roster ? { ...DATA.roster, league_id: DATA.league.id, league_name: DATA.league.name } : null,
-    who: saved.who || ""
-  
+    who: saved.who || "",
+    box: saved.box === true,          // drilldowns show box scores instead of name + points
+    bdOpen: new Set(),                // points breakdowns that are open: "season|week|player_id"
+    sosOpen: new Set()                // SOS detail rows that are open: opponent week
   };
 
   function weeksOf(season) {
@@ -535,17 +567,86 @@ footer { color: var(--muted); font-size: 12px; }
     $("board").innerHTML = html + "</tbody>";
   }
 
-  // Drilldown for one defense and position. Shown under whichever tab it was opened from.
-  function renderDetail(model, el = $("detail"), sel = state.sel, back = null) {
-    const t = sel && model.list.find(x => x.team === sel.team);
-    el.hidden = !t && !!back;
-    if (!t) {
-      el.innerHTML = `<p class="hint">Tap a number in the board to see which players scored those points, week by week.</p>`;
-      return;
+  // Stat lines (box scores and points breakdowns) live in stats/{season}.js, one file per season
+  // from 2026 on, and load the first time a drilldown needs them.
+  const STAT_SEASONS = (DATA.stat_seasons || []).map(String);
+  const statsLoad = {};
+  // Returns the season's stat lines, or "none" (season has none), "loading" or "failed".
+  function statsFor(season) {
+    season = String(season);
+    if (!STAT_SEASONS.includes(season)) return "none";
+    if (window.PA_STATS && window.PA_STATS[season]) return window.PA_STATS[season];
+    if (!statsLoad[season]) {
+      statsLoad[season] = "loading";
+      const sc = document.createElement("script");
+      sc.src = `stats/${season}.js?v=${encodeURIComponent(DATA.generated)}`;
+      sc.onload = () => render();
+      sc.onerror = () => { statsLoad[season] = "failed"; render(); };
+      document.head.appendChild(sc);
     }
-    const p = sel.pos, c = t.pos[p];
-    const [cls, label] = tier(c.rank, model.n);
-    const diff = c.value - model.leagueAvg[p];
+    return statsLoad[season];
+  }
+  const num = x => Number.isInteger(x) ? String(x) : (Math.round(x * 10) / 10).toFixed(1);
+  const sv = (st, ...keys) => keys.reduce((t, k) => t + (st[k] || 0), 0);
+  const ratio = (a, b) => st => (sv(st, a) || sv(st, b)) ? `${num(sv(st, a))}/${num(sv(st, b))}` : 0;
+  // Box score columns per position: [header, stat key or function, show only when someone has it].
+  const RUSH = [["Car", "rush_att"], ["Rush yd", "rush_yd"], ["Rush TD", "rush_td"]];
+  const RECV = [["Tgt", "rec_tgt"], ["Rec", "rec"], ["Rec yd", "rec_yd"], ["Rec TD", "rec_td"]];
+  const EXTRA = [["2PT", st => sv(st, "pass_2pt", "rush_2pt", "rec_2pt"), 1], ["Ret TD", "st_td", 1], ["Fum lost", "fum_lost", 1]];
+  const BOX = {
+    QB: [["C/Att", ratio("pass_cmp", "pass_att")], ["Pass yd", "pass_yd"], ["Pass TD", "pass_td"], ["INT", "pass_int"], ...RUSH, ...EXTRA],
+    RB: [...RUSH, ...RECV, ...EXTRA],
+    WR: [...RECV, ...RUSH.map(c => [...c, 1]), ...EXTRA],
+    TE: [...RECV, ...RUSH.map(c => [...c, 1]), ...EXTRA],
+    K: [["FG", ratio("fgm", "fga")], ["0–39", st => sv(st, "fgm_0_19", "fgm_20_29", "fgm_30_39")], ["40–49", "fgm_40_49"], ["50+", "fgm_50p"], ["XP", ratio("xpm", "xpa")]],
+    DEF: [["Pts allowed", "pts_allow"], ["Yds allowed", "yds_allow"], ["Sack", "sack"], ["INT", "int"], ["Fum rec", "fum_rec"],
+      ["TD", st => sv(st, "def_td", "def_st_td", "st_td", "fum_rec_td")], ["Safety", "safe", 1], ["Blk kick", "blk_kick", 1]]
+  };
+  const cellOf = (col, st) => typeof col[1] === "function" ? col[1](st) : (st[col[1]] || 0);
+  const minus = x => x < 0 ? "−" + fmt(-x) : fmt(x);
+  const bdKey = (season, wk, id) => `${season}|${wk}|${id}`;
+  function ptsButton(season, wk, id, pts) {
+    if (!STAT_SEASONS.includes(String(season))) return `<b>${fmt(pts)}</b>`;
+    const open = state.bdOpen.has(bdKey(season, wk, id));
+    return `<button type="button" class="ptsbtn" data-bd="${bdKey(season, wk, id)}" aria-expanded="${open}" title="Where these points came from">${fmt(pts)}</button>`;
+  }
+  // Chips showing which league scoring categories produced a player's points.
+  function bdHtml(stats, wk, id, shown) {
+    if (typeof stats === "string") return `<span class="note">${stats === "failed" ? "Couldn't load stat lines." : "Loading…"}</span>`;
+    const line = stats[`${wk}|${id}`];
+    const parts = line ? line[1] : [];
+    if (!parts.length) return `<span class="note">No scoring plays.</span>`;
+    const total = parts.reduce((t, x) => t + x[1], 0), cut = total - shown;
+    return `<span class="bd">${parts.map(([l, v]) => `<span class="chip ${v < 0 ? "neg" : ""}">${esc(l)} <b>${minus(v)}</b></span>`).join("")}
+      ${Math.abs(cut) >= 0.05 ? `<span class="chip">TD toggle leaves out <b>${fmt(cut)}</b></span>` : ""}</span>`;
+  }
+  // One position's box score for one game: a row per player, plus any open breakdown under it.
+  // Columns for a position across every game in the panel, so tables line up week to week.
+  function boxCols(pos, games, stats) {
+    const sts = games.flatMap(([wk, players]) => players.map(p => (stats[`${wk}|${p[3]}`] || [{}])[0]));
+    return BOX[pos].filter(c => !c[2] || sts.some(st => cellOf(c, st)));
+  }
+  function boxTable(season, wk, pos, players, stats, cols) {
+    const lines = players.map(p => ({ p, st: (stats[`${wk}|${p[3]}`] || [{}])[0] }));
+    const span = cols.length + 2;
+    return `<div class="boxwrap"><table class="box"><colgroup><col class="nm"><col span="${cols.length + 1}"></colgroup><thead><tr><th>${pos === "DEF" ? "Defense" : "Player"}</th><th>Pts</th>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${
+      lines.map(({ p, st }) => {
+        const open = state.bdOpen.has(bdKey(season, wk, p[3]));
+        return `<tr><td>${esc(p[0])}</td><td>${ptsButton(season, wk, p[3], p[2])}</td>${cols.map(c => { const v = cellOf(c, st); return `<td class="${v ? "" : "z"}">${typeof v === "number" ? num(v) : v}</td>`; }).join("")}</tr>`
+          + (open ? `<tr class="bdrow"><td colspan="${span}">${bdHtml(stats, wk, p[3], p[2])}</td></tr>` : "");
+      }).join("")}</tbody></table></div>`;
+  }
+  function boxToggle() {
+    if (!STAT_SEASONS.length) return "";
+    return `<div class="seg" role="group" aria-label="Player detail">
+      <button type="button" data-box="0" aria-pressed="${!state.box}">Players</button>
+      <button type="button" data-box="1" aria-pressed="${state.box}">Box score</button></div>`;
+  }
+
+  // The week-by-week list behind one defense and position: opponent, total, and the players
+  // (names and points, or a box score per position when the Box score toggle is on).
+  function weeksHtml(model, t, p) {
+    const c = t.pos[p];
     // Expected (adjusted) or the offense's average (raw) for one position-week.
     const baseOf = (w, pos) => {
       const team = w.players[0] && w.players[0][1], o = team && model.offense[team + "|" + pos];
@@ -559,7 +660,7 @@ footer { color: var(--muted); font-size: 12px; }
         const a = byWk[w.wk] ||= { wk: w.wk, pts: 0, base: 0, players: [], parts: [] };
         a.pts += w.pts; a.base += baseOf(w, pos);
         if (!a.players.length) a.players = w.players;
-        a.parts.push({ pos, pts: w.pts, base: baseOf(w, pos) });
+        a.parts.push({ pos, pts: w.pts, base: baseOf(w, pos), players: w.players });
       }
       weeks = Object.values(byWk).sort((a, b) => b.wk - a.wk);
     } else {
@@ -574,10 +675,48 @@ footer { color: var(--muted); font-size: 12px; }
       return `<span class="opp" title="${TEAMS[team] || ""}">${team} <span class="d ${diffCls(d)}">${signed(d)}</span></span>
         <span class="note">${fmt(base)} ${adj ? "expected" : "avg"}</span>`;
     };
+    const season = model.season;
+    const stats = state.box || state.bdOpen.size ? statsFor(season) : "none";
+    const boxed = state.box && typeof stats === "object";
+    const colsOf = {};
+    if (boxed) for (const pos of p === "ALL" ? OFF : [p])
+      colsOf[pos] = boxCols(pos, weeks.map(w => [w.wk, p === "ALL" ? (w.parts.find(x => x.pos === pos) || { players: [] }).players : w.players]), stats);
+    const playerLi = (w, [n, , pts, id]) => {
+      const pl = model.player[id], d = pts - pl.total / pl.games;
+      const tdNote = p === "DEF" && w.td ? ` <small class="note">${state.noTd ? "excl." : "incl."} ${fmt(w.td)} TD pts</small>` : "";
+      const open = state.bdOpen.has(bdKey(season, w.wk, id));
+      return `<li class="${pts ? "" : "zero"} ${open ? "open" : ""}">${esc(n)} ${ptsButton(season, w.wk, id, pts)}${tdNote} <span class="d ${diffCls(d)}" title="vs per-game avg ${fmt(pl.total / pl.games)} avg">${signed(d)}</span>${open ? bdHtml(stats, w.wk, id, pts) : ""}</li>`;
+    };
+    const partsLi = w => w.parts.map(x => `<li>${x.pos} <b>${fmt(x.pts)}</b> <span class="d ${diffCls(x.pts - x.base)}">${signed(x.pts - x.base)}</span></li>`).join("");
+    const note = state.box && stats === "none" ? `<p class="hint">Box scores start with the ${STAT_SEASONS[0] || "current"} season. Showing players and points for ${season}.</p>`
+      : state.box && stats === "loading" ? `<p class="hint">Loading box scores…</p>`
+      : state.box && stats === "failed" ? `<p class="hint">Couldn't load box scores. Reload the page to try again.</p>` : "";
+    return note + `<div class="weeks">${weeks.map(w => `
+        <div class="wk"><div class="side"><span class="lbl">Week ${w.wk} ${w.players[0] ? logo(w.players[0][1]) : ""}</span>
+          ${oppLine(w)}</div>
+          <span class="tot">${fmt(w.pts)}</span>
+          ${boxed
+            ? (p === "ALL" ? `<ul>${partsLi(w)}</ul>` : "") + `<div class="boxes">${(p === "ALL" ? w.parts.filter(x => x.players.length) : [{ pos: p, players: w.players }])
+                .map(x => (p === "ALL" ? `<div class="boxpos">${x.pos} <b>${fmt(x.pts)}</b></div>` : "") + boxTable(season, w.wk, x.pos, x.players, stats, colsOf[x.pos])).join("")}</div>`
+            : `<ul>${p === "ALL" ? partsLi(w) : w.players.map(pl => playerLi(w, pl)).join("")}</ul>`}
+        </div>`).join("")}</div>`;
+  }
+
+  // Drilldown for one defense and position. Shown under whichever tab it was opened from.
+  function renderDetail(model, el = $("detail"), sel = state.sel, back = null) {
+    const t = sel && model.list.find(x => x.team === sel.team);
+    el.hidden = !t && !!back;
+    if (!t) {
+      el.innerHTML = `<p class="hint">Tap a number in the board to see which players scored those points, week by week.</p>`;
+      return;
+    }
+    const p = sel.pos, c = t.pos[p];
+    const [cls, label] = tier(c.rank, model.n);
+    const diff = c.value - model.leagueAvg[p];
     el.innerHTML = `
       ${back ? `<button type="button" class="back" data-back="${back[0]}">↑ Back to ${back[1]}</button>` : ""}
-      <div><div class="eyebrow">${model.season} · weeks ${model.from}–${model.to}</div>
-      <h2>${t.team} vs ${p === "ALL" ? "all offense" : p} <span class="pill ${cls}">${label}</span></h2></div>
+      <div class="detail-head"><div><div class="eyebrow">${model.season} · weeks ${model.from}–${model.to}</div>
+      <h2>${t.team} vs ${p === "ALL" ? "all offense" : p} <span class="pill ${cls}">${label}</span></h2></div>${boxToggle()}</div>
       <div class="stats">
         <div class="stat"><b>${fmt(c.value)}</b><span>${state.adj ? "Adjusted " : ""}${model.mode === "avg" ? "per game" : "total"}</span></div>
         <div class="stat"><b>#${c.rank}</b><span>of ${model.n}</span></div>
@@ -586,17 +725,8 @@ footer { color: var(--muted); font-size: 12px; }
       </div>
       <p class="hint">${state.adj
         ? `Schedule-adjusted: next to each opponent is how far the game beat or missed what that offense's ${p}s were expected to score, based on their other ${model.season} games and the defenses they faced. Player numbers compare with each player's own per-game average.`
-        : `Green and red numbers compare each game with that offense's or player's own per-game average for ${model.season}, weeks ${model.from}–${model.to}.`}</p>
-      <div class="weeks">${weeks.map(w => `
-        <div class="wk"><div class="side"><span class="lbl">Week ${w.wk} ${w.players[0] ? logo(w.players[0][1]) : ""}</span>
-          ${oppLine(w)}</div>
-          <span class="tot">${fmt(w.pts)}</span>
-          <ul>${p === "ALL" ? w.parts.map(x => `<li>${x.pos} <b>${fmt(x.pts)}</b> <span class="d ${diffCls(x.pts - x.base)}">${signed(x.pts - x.base)}</span></li>`).join("") : w.players.map(([n, , pts, id]) => {
-            const pl = model.player[id], d = pts - pl.total / pl.games;
-            const tdNote = p === "DEF" && w.td ? ` <small class="note">${state.noTd ? "excl." : "incl."} ${fmt(w.td)} TD pts</small>` : "";
-            return `<li class="${pts ? "" : "zero"}">${n} <b>${fmt(pts)}</b>${tdNote} <span class="d ${diffCls(d)}" title="vs per-game avg ${fmt(pl.total / pl.games)} avg">${signed(d)}</span></li>`;
-          }).join("")}</ul>
-        </div>`).join("")}</div>`;
+        : `Green and red numbers compare each game with that offense's or player's own per-game average for ${model.season}, weeks ${model.from}–${model.to}.`}${STAT_SEASONS.includes(String(model.season)) ? " Tap a player's points to see which scoring categories they came from." : ""}</p>
+      ${weeksHtml(model, t, p)}`;
   }
 
   // Upcoming matchups always use the current season: the selected week range when it is the
@@ -699,15 +829,19 @@ footer { color: var(--muted); font-size: 12px; }
     const d = $("sos-detail"), r = state.ssel && s.rows.find(x => x.team === state.ssel.team);
     if (!r) { d.innerHTML = `<p class="hint">Tap a cell to see that team's opponents week by week.</p>`; return; }
     const p = state.ssel.pos, c = r.pos[p];
+    const what = p === "ALL" ? "all offense" : p + "s";
     const lines = s.weeks.map(w => {
       const g = r.games.find(x => x.wk === w);
       if (!g) return `<div class="sosw"><span class="lbl">Wk ${w}</span><span class="opp">Bye</span><span></span></div>`;
-      const oc = s.m.byTeam[g.team]?.pos[p], diff = oc ? oc.value - s.m.leagueAvg[p] : 0;
-      return `<div class="sosw"><span class="lbl">Wk ${w}</span><span class="opp">${g.at} ${logo(g.team)}${g.team}</span>
-        <span><b class="d ${diffCls(diff)}">${signed(diff)}</b> <small class="note">#${oc ? oc.rank : "—"}</small></span></div>`;
+      const dt = s.m.byTeam[g.team], oc = dt?.pos[p], diff = oc ? oc.value - s.m.leagueAvg[p] : 0;
+      const open = !!dt && state.sosOpen.has(w);
+      return `<div class="sosw ${dt ? "tap" : ""}" ${dt ? `tabindex="0" role="button" data-sosopen="${w}" aria-expanded="${open}"` : ""}>
+        <span class="lbl">Wk ${w}</span><span class="opp">${dt ? `<span class="chev" aria-hidden="true">›</span>` : ""}${g.at} ${logo(g.team)}${g.team}</span>
+        <span><b class="d ${diffCls(diff)}">${signed(diff)}</b> <small class="note">#${oc ? oc.rank : "—"}</small></span></div>`
+        + (open ? `<div class="sosx"><p class="hint">What ${g.team} allowed to ${what}: ${fmt(oc.value)} per game, #${oc.rank} of ${s.m.n} (${rangeText(s.m)}).</p>${weeksHtml(s.m, dt, p)}</div>` : "");
     }).join("");
-    d.innerHTML = `<div><div class="eyebrow">Weeks ${state.sosFrom}–${state.sosTo}</div><h2>${r.team} ${p === "ALL" ? "offense" : p + "s"}: ${signed(c.value)} <span class="pill ${tier(c.rank, s.rows.length)[0]}">${tier(c.rank, s.rows.length)[1].replace("matchup", "schedule")}</span></h2></div>
-      <p class="hint">Each opponent's points allowed to ${p === "ALL" ? "offenses" : p + "s"} vs the league average, per game (${rangeText(s.m)}). Small number = that defense's rank.</p>
+    d.innerHTML = `<div class="detail-head"><div><div class="eyebrow">Weeks ${state.sosFrom}–${state.sosTo}</div><h2>${r.team} ${p === "ALL" ? "offense" : p + "s"}: ${signed(c.value)} <span class="pill ${tier(c.rank, s.rows.length)[0]}">${tier(c.rank, s.rows.length)[1].replace("matchup", "schedule")}</span></h2></div>${boxToggle()}</div>
+      <p class="hint">Each opponent's points allowed to ${p === "ALL" ? "offenses" : p + "s"} vs the league average, per game (${rangeText(s.m)}). Small number = that defense's rank. Tap an opponent to see the players and stat lines behind its number.</p>
       <div class="weeks">${lines}</div>`;
   }
 
@@ -754,7 +888,7 @@ footer { color: var(--muted); font-size: 12px; }
     if (state.view === "week") { renderWeek(); if (m) renderDetail(m, $("detail-week"), state.wsel, ["week", "matchups"]); }
     if (state.view === "team") { renderTeam(); if (m) renderDetail(m, $("detail-team"), state.tsel, ["team", "your team"]); }
     if (state.view === "sos") renderSOS();
-    store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir, view: state.view, adj: state.adj, noTd: state.noTd, noSkillTd: state.noSkillTd, noQbRushTd: state.noQbRushTd, noQbPassTd: state.noQbPassTd, who: state.who });
+    store.set({ season: state.season, mode: state.mode, sort: state.sort, dir: state.dir, view: state.view, adj: state.adj, noTd: state.noTd, noSkillTd: state.noSkillTd, noQbRushTd: state.noQbRushTd, noQbPassTd: state.noQbPassTd, who: state.who, box: state.box });
   }
 
   // Matchups and My team open the drilldown in place, below their own table.
@@ -766,6 +900,15 @@ footer { color: var(--muted); font-size: 12px; }
   document.addEventListener("click", e => {
     const b = e.target.closest("[data-back]");
     if (b) $("view-" + b.dataset.back).scrollIntoView({ block: "start" });
+    const box = e.target.closest("[data-box]");
+    if (box) { state.box = box.dataset.box === "1"; render(); return; }
+    const bd = e.target.closest("[data-bd]");
+    if (bd) { const k = bd.dataset.bd; state.bdOpen.has(k) ? state.bdOpen.delete(k) : state.bdOpen.add(k); render(); return; }
+    const so = e.target.closest("[data-sosopen]");
+    if (so) { const w = +so.dataset.sosopen; state.sosOpen.has(w) ? state.sosOpen.delete(w) : state.sosOpen.add(w); render(); }
+  });
+  document.addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-sosopen]")) { e.preventDefault(); e.target.click(); }
   });
 
   $("season").addEventListener("change", e => { state.season = e.target.value; resetWeeks(); render(); });
@@ -805,7 +948,7 @@ footer { color: var(--muted); font-size: 12px; }
     const s = e.target.closest("[data-ssort]");
     if (s) { const k = s.dataset.ssort; state.sdir = state.ssort === k ? -state.sdir : 1; state.ssort = k; render(); return; }
     const c = e.target.closest("[data-steam]");
-    if (c) { state.ssel = { team: c.dataset.steam, pos: c.dataset.spos }; render(); $("sos-detail").scrollIntoView({ block: "start" }); }
+    if (c) { state.ssel = { team: c.dataset.steam, pos: c.dataset.spos }; state.sosOpen.clear(); render(); $("sos-detail").scrollIntoView({ block: "start" }); }
   });
   $("sos").addEventListener("keydown", e => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-steam]")) { e.preventDefault(); e.target.click(); }
