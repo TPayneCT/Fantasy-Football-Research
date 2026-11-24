@@ -2,7 +2,10 @@ name: Update fantasy data
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # Daily 12:00 UTC (5am Arizona): finished games, stat corrections and roster moves
+    # GitHub cron is UTC only. Arizona is UTC-7 all year (no daylight saving).
+    - cron: "5 5 * * 2"    # Tue 05:05 UTC = Mon 10:05pm Arizona: right after Monday Night Football
+    - cron: "35 6 * * 2"   # Tue 06:35 UTC = Mon 11:35pm Arizona: backup for overtime, late MNF or a delayed run
+    - cron: "0 12 * * *"   # Daily 12:00 UTC (5am Arizona): stat corrections and roster moves
   workflow_dispatch:
 
 permissions:
